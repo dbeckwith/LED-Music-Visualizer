@@ -1,0 +1,19 @@
+{
+	"folders":
+	[
+		{
+			"file_exclude_patterns":
+			[
+				"led_music_visualizer.sublime-workspace"
+			],
+			"folder_exclude_patterns":
+			[
+				"tcl",
+				"Scripts",
+				"Lib",
+				"Include"
+			],
+			"path": "."
+		}
+	]
+}

@@ -4,14 +4,17 @@
 		{
 			"file_exclude_patterns":
 			[
-				"led_music_visualizer.sublime-workspace"
+				"led_music_visualizer.sublime-workspace",
+				"pip-selfcheck.json"
 			],
 			"folder_exclude_patterns":
 			[
-				"tcl",
-				"Scripts",
+				"LED_Music_Visualizer.egg-info",
 				"Lib",
-				"Include"
+				"Scripts",
+				"tcl",
+				"Include",
+				"__pycache__"
 			],
 			"path": "."
 		}

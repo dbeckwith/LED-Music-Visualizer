@@ -9,7 +9,6 @@
 			],
 			"folder_exclude_patterns":
 			[
-				"LED_Music_Visualizer.egg-info",
 				"Lib",
 				"Scripts",
 				"tcl",

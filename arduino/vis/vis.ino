@@ -38,9 +38,9 @@ void loop() {
     while (!Serial.available());
     red = Serial.read();
     while (!Serial.available());
-    blue = Serial.read();
-    while (!Serial.available());
     green = Serial.read();
+    while (!Serial.available());
+    blue = Serial.read();
     strip.setPixelColor(index, red, green, blue);
     if (index == LED_COUNT - 1) {
       strip.show();

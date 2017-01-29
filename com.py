@@ -12,6 +12,9 @@ def _get_arduino_port():
 
 def _open_arduino_com():
     port = _get_arduino_port()
+    if port is None:
+        print('No Arduino connected')
+        exit()
     print('Connecting to Arduino on {}...'.format(port))
     com = serial.Serial(
         port = port,

@@ -10,11 +10,12 @@ TAIL_LEN = 0.5
 FPS_PRINT_INTERVAL = 5.0
 
 if __name__ == '__main__':
-    with Visualizer(use_arduino=True) as vis:
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-a', '--use_arduino', action='store_true')
+    args = parser.parse_args()
 
-        def pos(t):
-            return int(np.clip(int((np.sin(t * 2 * np.pi / 4) + 1) / 2 * config.NUM_LEDS), 0, config.NUM_LEDS-1))
-
+    with Visualizer(use_arduino=args.use_arduino) as vis:
         start_time = time.time()
         last_fps_print_time = start_time
         start_frames = 0
@@ -28,7 +29,8 @@ if __name__ == '__main__':
 
             pixels = np.zeros((config.NUM_LEDS, config.CHANNELS), dtype=np.float32)
             for c in range(config.CHANNELS):
-                xs[c].insert(0, (pos(t + offsets[c]), t))
+                pos = int(np.clip(int((np.sin((t + offsets[c]) * 2 * np.pi / 4) + 1) / 2 * config.NUM_LEDS), 0, config.NUM_LEDS-1))
+                xs[c].insert(0, (pos, t))
                 while t - xs[c][-1][1] >= TAIL_LEN:
                     xs[c].pop()
                 if xs[c][0][0] <= xs[c][-1][0]:

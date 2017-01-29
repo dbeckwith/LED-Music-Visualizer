@@ -1,4 +1,5 @@
 import time
+import signal
 import numpy as np
 
 import config
@@ -9,7 +10,7 @@ TAIL_LEN = 0.5
 FPS_PRINT_INTERVAL = 5.0
 
 if __name__ == '__main__':
-    with Visualizer(debug_mode=True) as vis:
+    with Visualizer(use_arduino=True) as vis:
 
         def pos(t):
             return int(np.clip(int((np.sin(t * 2 * np.pi / 4) + 1) / 2 * config.NUM_LEDS), 0, config.NUM_LEDS-1))
@@ -20,7 +21,8 @@ if __name__ == '__main__':
         frames = 0
         offsets = np.array([0, -TAIL_LEN*1.5, -TAIL_LEN*3.0], dtype=np.float32)
         xs = ([], [], [])
-        while True:
+        signal.signal(signal.SIGINT, lambda *args: vis.stop())
+        while not vis.stopped:
             t = time.time()
             total_time = t - start_time
 
@@ -49,3 +51,5 @@ if __name__ == '__main__':
                 print('{:d} frames in {:.2f} seconds ({:.2f} fps)'.format(total_frames, fps_print_time, total_frames / fps_print_time))
                 last_fps_print_time = t
                 start_frames = frames
+        
+        signal.signal(signal.SIGINT, signal.SIG_DFL)

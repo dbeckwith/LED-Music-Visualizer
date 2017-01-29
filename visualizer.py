@@ -31,45 +31,63 @@ def _open_arduino_com():
     return com
 
 class Visualizer(object):
-    def __init__(self, debug_mode=False):
-        self.debug_mode = debug_mode
+    def __init__(self, use_arduino=True):
+        self.use_arduino = use_arduino
+        self.stopped = False
+
+    def send_off(self):
+        if not self.stopped:
+            self._send_off()
+
+    def _send_off(self):
+        self._send_pixels(np.zeros((config.NUM_LEDS, 3), dtype=np.float32))
 
     def send_pixels(self, pixels):
+        if not self.stopped:
+            self._send_pixels(pixels)
+
+    def _send_pixels(self, pixels):
         pixels = (np.clip(pixels, 0.0, 1.0) * 0xFF).astype(np.uint8)
-        if not self.debug_mode:
+        if self.use_arduino:
             data = []
             for index, color in enumerate(pixels):
                 data.append(index)
                 data.extend(color)
             self.arduino.write(bytes(data))
             self.arduino.read()
-        else:
-            for c in range(3):
-                self.plots[c].setData(y=pixels[:, c])
-            self.app.processEvents()
-            # time.sleep(1 / config.APPROX_FPS)
+
+        for c in range(3):
+            self.plots[c].setData(y=pixels[:, c])
+        self.app.processEvents()
+
+    def stop(self):
+        if not self.stopped:
+            print('Stopping vis')
+            self.stopped = True
+            if self.use_arduino:
+                self._send_off()
+                self.arduino.close()
+
+            self.win.close()
 
     def __enter__(self, *args):
-        if not self.debug_mode:
+        if self.use_arduino:
             self.arduino = _open_arduino_com().__enter__(*args)
-        else:
-            self.app = QtGui.QApplication([])
-            self.win = pg.GraphicsWindow(title='LED Music Visualizer')
-            self.win.closeEvent = lambda *args: exit()
-            self.win.resize(800, 600)
-            self.layout = QtGui.QHBoxLayout()
-            self.win.setLayout(self.layout)
-            self.plot_widget = pg.PlotWidget(title='LED Colors')
-            self.plot_widget.setYRange(0, 255, padding=0)
-            self.plot_widget.getAxis('left').setTickSpacing(15, 3)
-            self.layout.addWidget(self.plot_widget)
-            self.plots = []
-            for c in range(3):
-                self.plots.append(self.plot_widget.plot(pen=tuple(255 if i == c else 0 for i in range(3))))
+
+        self.app = QtGui.QApplication([])
+        self.win = pg.GraphicsWindow(title='LED Music Visualizer')
+        self.win.closeEvent = lambda *args: self.stop()
+        self.win.resize(800, 600)
+        self.layout = QtGui.QHBoxLayout()
+        self.win.setLayout(self.layout)
+        self.plot_widget = pg.PlotWidget(title='LED Colors')
+        self.plot_widget.setYRange(0, 255, padding=0)
+        self.plot_widget.getAxis('left').setTickSpacing(15, 3)
+        self.layout.addWidget(self.plot_widget)
+        self.plots = []
+        for c in range(3):
+            self.plots.append(self.plot_widget.plot(pen=tuple(255 if i == c else 0 for i in range(3))))
         return self
 
     def __exit__(self, *args):
-        if not self.debug_mode:
-            self.arduino.__exit__(*args)
-        else:
-            self.win.close()
+        self.stop()

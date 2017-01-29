@@ -28,7 +28,7 @@ def _open_arduino_com():
     print('Connected')
     return com
 
-class Com(object):
+class Visualizer(object):
     def __init__(self, debug_mode=False):
         self.debug_mode = debug_mode
 

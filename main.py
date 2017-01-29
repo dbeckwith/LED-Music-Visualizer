@@ -2,18 +2,18 @@ import time
 import numpy as np
 
 import config
-from com import Com
-
-
-def pos(f):
-    return np.clip(int((np.sin(f * 2 * np.pi / config.APPROX_FPS / 4) + 1) / 2 * config.NUM_LEDS), 0, config.NUM_LEDS-1)
+from visualizer import Visualizer
 
 
 TAIL_LEN = 10
 FPS_PRINT_INTERVAL = 5.0
 
 if __name__ == '__main__':
-    with Com(debug_mode=True) as com:
+    with Visualizer(debug_mode=True) as vis:
+
+        def pos(f):
+            return np.clip(int((np.sin(f * 2 * np.pi / config.APPROX_FPS / 4) + 1) / 2 * config.NUM_LEDS), 0, config.NUM_LEDS-1)
+
         start_time = time.time()
         start_frames = 0
         frames = 0
@@ -37,7 +37,7 @@ if __name__ == '__main__':
                     min_fade = 0.0
                     max_fade = 1.0
                 pixels[min_x:max_x+1, c] = np.square(np.linspace(min_fade, max_fade, num=max_x+1-min_x))
-            com.send_pixels(pixels * 1.0)
+            vis.send_pixels(pixels * 1.0)
             frames += 1
             t = time.time()
             total_time = t - start_time

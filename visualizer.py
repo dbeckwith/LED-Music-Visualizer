@@ -31,8 +31,9 @@ def _open_arduino_com():
     return com
 
 class Visualizer(object):
-    def __init__(self, use_arduino=True):
+    def __init__(self, use_arduino=True, brightness=1.0):
         self.use_arduino = use_arduino
+        self.brightness = np.clip(brightness, 0.0, 1.0)
         self.stopped = False
 
     def send_off(self):
@@ -47,7 +48,8 @@ class Visualizer(object):
             self._send_pixels(pixels)
 
     def _send_pixels(self, pixels):
-        pixels = (np.clip(pixels, 0.0, 1.0) * 0xFF).astype(np.uint8)
+        pixels = (np.clip(pixels * self.brightness, 0.0, 1.0) * 0xFF).astype(np.uint8)
+
         if self.use_arduino:
             data = []
             for index, color in enumerate(pixels):

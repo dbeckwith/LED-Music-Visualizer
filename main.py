@@ -15,7 +15,7 @@ if __name__ == '__main__':
     parser.add_argument('-a', '--use_arduino', action='store_true')
     args = parser.parse_args()
 
-    with Visualizer(use_arduino=args.use_arduino) as vis:
+    with Visualizer(use_arduino=args.use_arduino, brightness=0.2) as vis:
         start_time = time.time()
         last_fps_print_time = start_time
         start_frames = 0

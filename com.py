@@ -1,6 +1,9 @@
+import time
 import serial
 from serial.tools.list_ports import comports as list_ports
-import time
+import matplotlib.pyplot as plt
+
+import config
 
 
 def _get_arduino_port():
@@ -26,20 +29,38 @@ def _open_arduino_com():
     return com
 
 class Com(object):
+    def __init__(self, debug_mode=False):
+        self.debug_mode = debug_mode
+
     def send_pixels(self, pixels):
-        data = []
-        for index, color in enumerate(pixels):
-            data.append(index)
-            for c in color:
-                if c < 0.0: c = 0.0
-                if c > 1.0: c = 1.0
-                data.append(int(c * 0xFF))
-        self.arduino.write(bytes(data))
-        self.arduino.read()
+        if not self.debug_mode:
+            data = []
+            for index, color in enumerate(pixels):
+                data.append(index)
+                for c in color:
+                    if c < 0.0: c = 0.0
+                    if c > 1.0: c = 1.0
+                    data.append(int(c * 0xFF))
+            self.arduino.write(bytes(data))
+            self.arduino.read()
+        else:
+            # TODO: change to opengl window or something
+            plot_args = []
+            for i, c in enumerate('rgb'):
+                plot_args.append(pixels[:, i])
+                plot_args.append(c + '-')
+            plt.cla()
+            plt.plot(*plot_args)
+            plt.pause(0.001)
 
     def __enter__(self, *args):
-        self.arduino = _open_arduino_com().__enter__(*args)
+        if not self.debug_mode:
+            self.arduino = _open_arduino_com().__enter__(*args)
+        else:
+            plt.axis([0, config.NUM_LEDS-1, 0.0, 1.0])
+            plt.ion()
         return self
 
     def __exit__(self, *args):
-        self.arduino.__exit__(*args)
+        if not self.debug_mode:
+            self.arduino.__exit__(*args)

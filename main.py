@@ -32,7 +32,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-a', '--use_arduino', action='store_true')
     parser.add_argument('-m', '--music_path', type=file, required=False)
-    parser.add_argument('-b', '--brightness', type=float_normal, default=0.2)
+    parser.add_argument('-b', '--brightness', type=float_normal, default=1.0)
     parser.add_argument('-v', '--volume', type=float_normal, default=0.5)
     args = parser.parse_args()
 
@@ -52,13 +52,12 @@ if __name__ == '__main__':
             audio.start()
 
             while vis.running:
-                pixels = np.zeros((config.NUM_LEDS, config.NUM_LED_CHANNELS), dtype=np.float32)
+                pixels = audio.spectrogram(audio.elapsed_time)
 
-                pixels[:, 0] = audio.spectrogram(audio.elapsed_time)
-
+                # pixels = np.zeros((config.NUM_LEDS, config.NUM_LED_CHANNELS), dtype=np.float32)
                 # for c in range(config.NUM_LED_CHANNELS):
-                #     head = trail_pos(t + offsets[c])
-                #     tail = trail_pos(t + offsets[c] - TAIL_LEN)
+                #     head = trail_pos(audio.elapsed_time + offsets[c])
+                #     tail = trail_pos(audio.elapsed_time + offsets[c] - TAIL_LEN)
                 #     if head <= tail:
                 #         min_x = head
                 #         max_x = tail

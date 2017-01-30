@@ -56,16 +56,21 @@ class Visualizer(object):
 
     def send_pixels(self, pixels):
         if self.running:
-            assert pixels.shape == (config.NUM_LEDS, config.NUM_LED_CHANNELS)
+            assert pixels.shape in ((config.NUM_LEDS,), (config.NUM_LEDS, config.NUM_LED_CHANNELS))
             pixels = (np.clip(pixels * self.brightness, 0.0, 1.0) * 0xFF).astype(np.uint8)
+            if pixels.ndim == 1:
+                pixels = np.tile(pixels, (config.NUM_LED_CHANNELS, 1)).T
 
             self._send_pixels(pixels)
 
             for c in range(3):
                 self.plots[c].setData(y=pixels[:, c])
+
             dt = time.time() - self.start_time
             if dt > 0:
                 self.fps_label.setText('FPS: {:.1f}'.format(self.frames / dt))
+
+            self.led_viewer.set_colors(pixels)
 
             self.app.processEvents()
 
@@ -103,28 +108,39 @@ class Visualizer(object):
             self.arduino = _open_arduino_com().__enter__(*args)
 
         print('Creating GUI')
-        # TODO: led image
 
         self.app = QtGui.QApplication([])
 
         self.view = pg.GraphicsView()
         self.view.closeEvent = lambda *args: self.stop()
-        self.view.resize(800, 600)
+        self.view.resize(1280, 800)
         self.view.setWindowTitle('LED Music Visualizer')
 
         self.layout = pg.GraphicsLayout()
         self.view.setCentralItem(self.layout)
 
         self.plot = self.layout.addPlot(title='LED Colors')
+        self.plot.hideButtons()
+        self.plot.setMouseEnabled(x=False, y=False)
         self.plot.setYRange(0, 255, padding=0)
         self.plot.getAxis('left').setTickSpacing(15, 3)
         self.plots = []
         for c in range(3):
             self.plots.append(self.plot.plot(pen=tuple(255 if i == c else 0 for i in range(3))))
+        self.layout.layout.setRowStretchFactor(0, 1)
+
+        self.layout.nextRow()
+
+        led_viewer_proxy = QtGui.QGraphicsProxyWidget(self.layout)
+        self.led_viewer = LEDViewer()
+        led_viewer_proxy.setWidget(self.led_viewer)
+        self.layout.addItem(led_viewer_proxy)
+        self.layout.layout.setRowStretchFactor(1, 0)
 
         self.layout.nextRow()
 
         self.fps_label = self.layout.addLabel('')
+        self.layout.layout.setRowStretchFactor(2, 0)
 
         print('Created GUI')
 
@@ -141,3 +157,29 @@ class Visualizer(object):
         self.view.close()
         self.app.quit()
         print('Closed GUI')
+        # pg.exit()
+
+class LEDViewer(QtGui.QGraphicsView):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+
+        self.setRenderHints(QtGui.QPainter.Antialiasing | QtGui.QPainter.SmoothPixmapTransform)
+
+        scene = QtGui.QGraphicsScene()
+        scene.setBackgroundBrush(QtGui.QBrush(QtGui.QColor(0, 0, 0)))
+
+        size = 10
+        spacing = 4
+
+        self.leds = []
+        for i in range(config.NUM_LEDS):
+            led = scene.addEllipse(i * (size + spacing), 0.0, size, size)
+            led.setPen(QtGui.QPen(QtGui.QBrush(QtGui.QColor(127, 127, 127)), 1.0))
+            led.setBrush(QtGui.QBrush(QtGui.QColor(0, 0, 0)))
+            self.leds.append(led)
+
+        self.setScene(scene)
+
+    def set_colors(self, colors):
+        for i, led in enumerate(self.leds):
+            led.setBrush(QtGui.QBrush(QtGui.QColor(*colors[i])))

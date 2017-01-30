@@ -4,6 +4,7 @@ import numpy as np
 
 import config
 from visualizer import Visualizer
+from audio import Audio
 
 
 def trail_pos(t):
@@ -20,39 +21,40 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     with Visualizer(use_arduino=args.use_arduino, brightness=0.2) as vis:
-        start_time = time.time()
-        last_fps_print_time = start_time
-        start_frames = 0
-        frames = 0
-        offsets = np.array([0, -TAIL_LEN*1.5, -TAIL_LEN*3.0], dtype=np.float32)
-        signal.signal(signal.SIGINT, lambda *args: vis.stop())
-        while not vis.stopped:
-            t = time.time()
-            total_time = t - start_time
+        # TODO: try a simpler sound, like a sine wave with frequency going in a predictable pattern
+        with Audio(r"C:\Users\Daniel\Dropbox\Music\music\Deadmau5\Random Album Title\1-11 Arguru.mp3", frame_size=0.1, audio_volume=0.5) as audio:
+            offsets = np.array([0, -TAIL_LEN*1.5, -TAIL_LEN*3.0], dtype=np.float32)
 
-            pixels = np.zeros((config.NUM_LEDS, config.CHANNELS), dtype=np.float32)
-            for c in range(config.CHANNELS):
-                head = trail_pos(t + offsets[c])
-                tail = trail_pos(t + offsets[c] - TAIL_LEN)
-                if head <= tail:
-                    min_x = head
-                    max_x = tail
-                    min_fade = 1.0
-                    max_fade = 0.0
-                else:
-                    min_x = tail
-                    max_x = head
-                    min_fade = 0.0
-                    max_fade = 1.0
-                pixels[min_x:max_x+1, c] = np.linspace(min_fade, max_fade, num=max_x+1-min_x) ** 1
-            vis.send_pixels(pixels * 1.0)
+            def sigint(signum, frame):
+                vis.stop()
+                signal.signal(signal.SIGINT, signal.SIG_DFL)
+            signal.signal(signal.SIGINT, sigint)
 
-            frames += 1
-            fps_print_time = t - last_fps_print_time
-            if fps_print_time >= FPS_PRINT_INTERVAL:
-                total_frames = frames - start_frames
-                print('{:d} frames in {:.2f} seconds ({:.2f} fps)'.format(total_frames, fps_print_time, total_frames / fps_print_time))
-                last_fps_print_time = t
-                start_frames = frames
-        
-        signal.signal(signal.SIGINT, signal.SIG_DFL)
+            start_time = time.time()
+            vis.start()
+            audio.start()
+
+            while vis.running:
+                t = time.time()
+                total_time = t - start_time
+
+                pixels = np.zeros((config.NUM_LEDS, config.CHANNELS), dtype=np.float32)
+
+                pixels[:, 0] = audio.spectrogram(total_time)
+
+                # for c in range(config.CHANNELS):
+                #     head = trail_pos(t + offsets[c])
+                #     tail = trail_pos(t + offsets[c] - TAIL_LEN)
+                #     if head <= tail:
+                #         min_x = head
+                #         max_x = tail
+                #         min_fade = 1.0
+                #         max_fade = 0.0
+                #     else:
+                #         min_x = tail
+                #         max_x = head
+                #         min_fade = 0.0
+                #         max_fade = 1.0
+                #     pixels[min_x:max_x+1, c] = np.linspace(min_fade, max_fade, num=max_x+1-min_x) ** 1
+
+                vis.send_pixels(pixels)

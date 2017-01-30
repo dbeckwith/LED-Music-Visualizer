@@ -31,7 +31,7 @@ def _open_arduino_com():
     if port is None:
         print('No Arduino connected')
         exit()
-    print('Connecting to Arduino on {}...'.format(port))
+    print('Connecting to Arduino on {}'.format(port))
     com = serial.Serial(
         port = port,
         baudrate = 115200,
@@ -56,14 +56,16 @@ class Visualizer(object):
 
     def send_pixels(self, pixels):
         if self.running:
-            assert pixels.shape == (config.NUM_LEDS, config.CHANNELS)
+            assert pixels.shape == (config.NUM_LEDS, config.NUM_LED_CHANNELS)
             pixels = (np.clip(pixels * self.brightness, 0.0, 1.0) * 0xFF).astype(np.uint8)
 
             self._send_pixels(pixels)
 
             for c in range(3):
                 self.plots[c].setData(y=pixels[:, c])
-            self.fps_label.setText('FPS: {:.1f}'.format(self.frames / (time.time() - self.start_time)))
+            dt = time.time() - self.start_time
+            if dt > 0:
+                self.fps_label.setText('FPS: {:.1f}'.format(self.frames / dt))
 
             self.app.processEvents()
 
@@ -83,20 +85,25 @@ class Visualizer(object):
             self.arduino.read()
 
     def start(self):
+        print('Starting visualizer')
         self.view.show()
         self.app.processEvents()
         self.start_time = time.time()
         self.frames = 0
         self.running = True
+        print('Started visualizer')
 
     def stop(self):
         if self.running:
-            print('Stopping vis')
+            print('Stopping visualizer')
             self.running = False
 
     def __enter__(self, *args):
         if self.use_arduino:
             self.arduino = _open_arduino_com().__enter__(*args)
+
+        print('Creating GUI')
+        # TODO: led image
 
         self.app = QtGui.QApplication([])
 
@@ -119,12 +126,18 @@ class Visualizer(object):
 
         self.fps_label = self.layout.addLabel('')
 
+        print('Created GUI')
+
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
         if self.use_arduino:
+            print('Disconnecting from Arduino')
             self._send_off()
             self.arduino.close()
+            print('Disconnected from Arduino')
 
+        print('Closing GUI')
         self.view.close()
         self.app.quit()
+        print('Closed GUI')

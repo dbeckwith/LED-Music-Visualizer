@@ -5,6 +5,7 @@ from pyqtgraph.Qt import QtGui
 import pyqtgraph as pg
 
 import config
+import util
 
 
 def _get_arduino_port():
@@ -31,6 +32,7 @@ def _open_arduino_com():
     if port is None:
         print('No Arduino connected')
         exit()
+    util.timer('Connecting to Arduino'.format(port))
     print('Connecting to Arduino on {}'.format(port))
     com = serial.Serial(
         port = port,
@@ -38,7 +40,6 @@ def _open_arduino_com():
         timeout = 1.0
     )
     time.sleep(3)
-    print('Connected')
     return com
 
 class Visualizer(object):
@@ -90,24 +91,23 @@ class Visualizer(object):
             self.arduino.read()
 
     def start(self):
-        print('Starting visualizer')
+        util.timer('Starting visualizer')
         self.view.show()
         self.app.processEvents()
         self.start_time = time.time()
         self.frames = 0
         self.running = True
-        print('Started visualizer')
 
     def stop(self):
         if self.running:
-            print('Stopping visualizer')
+            util.timer('Stopping visualizer')
             self.running = False
 
     def __enter__(self, *args):
         if self.use_arduino:
             self.arduino = _open_arduino_com().__enter__(*args)
 
-        print('Creating GUI')
+        util.timer('Creating GUI')
 
         self.app = QtGui.QApplication([])
 
@@ -142,21 +142,17 @@ class Visualizer(object):
         self.fps_label = self.layout.addLabel('')
         self.layout.layout.setRowStretchFactor(2, 0)
 
-        print('Created GUI')
-
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
         if self.use_arduino:
-            print('Disconnecting from Arduino')
+            util.timer('Disconnecting from Arduino')
             self._send_off()
             self.arduino.close()
-            print('Disconnected from Arduino')
 
-        print('Closing GUI')
+        util.timer('Closing GUI')
         self.view.close()
         self.app.quit()
-        print('Closed GUI')
         # pg.exit()
 
 class LEDViewer(QtGui.QGraphicsView):

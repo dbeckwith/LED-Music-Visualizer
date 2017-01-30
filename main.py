@@ -4,6 +4,7 @@ import signal
 import numpy as np
 
 import config
+import util
 from visualizer import Visualizer
 from audio import Audio
 
@@ -40,7 +41,7 @@ if __name__ == '__main__':
         args.music_path = ':debug:'
 
     with Visualizer(use_arduino=args.use_arduino, brightness=args.brightness) as vis:
-        with Audio(args.music_path, frame_size=0.1, audio_volume=args.volume) as audio:
+        with Audio(args.music_path, audio_volume=args.volume) as audio:
             offsets = np.array([0, -TAIL_LEN*1.5, -TAIL_LEN*3.0], dtype=np.float32)
 
             def sigint(signum, frame):
@@ -52,7 +53,9 @@ if __name__ == '__main__':
             audio.start()
 
             while vis.running:
-                pixels = audio.spectrogram(audio.elapsed_time)
+                spec = audio.spectrogram(audio.elapsed_time)
+                spec = np.abs(spec)
+                pixels = np.interp(np.arange(60), np.arange(spec.shape[0]), spec)
 
                 # pixels = np.zeros((config.NUM_LEDS, config.NUM_LED_CHANNELS), dtype=np.float32)
                 # for c in range(config.NUM_LED_CHANNELS):
@@ -74,3 +77,5 @@ if __name__ == '__main__':
 
                 if not audio.running:
                     vis.stop()
+                    
+    util.timer()

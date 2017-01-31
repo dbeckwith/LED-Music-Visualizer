@@ -42,18 +42,18 @@ def smooth(alpha_decay=0.5, alpha_rise=0.5):
     return decorator
 
 class Audio(object):
-    def __init__(self, path, audio_volume=1.0):
+    def __init__(self, path=None, audio_volume=1.0):
         self.path = path
         self.audio_volume = audio_volume
 
-        if self.path == ':debug:':
+        if self.path is None:
             util.timer('Generating debug audio')
             self.sample_rate = 44100
             self.channels = 1
             self.sample_width = 2
-            self.raw_samples = np.arange(0.0, 10.0, 1 / self.sample_rate)
-            self.raw_samples = np.cos(2 * np.pi * (1000 * self.raw_samples + 100 * np.sin(2 * np.pi * 0.5 * self.raw_samples)))
-            self.raw_samples = (self.raw_samples * ((1 << 15) - 1)).astype(np.int16)
+            self.samples = np.arange(0.0, 10.0, 1 / self.sample_rate)
+            self.samples = np.cos(2 * np.pi * (1000 * self.samples + 100 * np.sin(2 * np.pi * 0.5 * self.samples)))
+            self.samples = (self.samples * ((1 << 15) - 1)).astype(np.int16)
         else:
             util.timer('Loading audio')
             print('Loading audio from {}'.format(path))
@@ -61,10 +61,10 @@ class Audio(object):
             self.sample_rate = seg.frame_rate
             self.channels = seg.channels
             self.sample_width = seg.sample_width
-            self.raw_samples = np.array(seg.get_array_of_samples())
+            self.samples = np.array(seg.get_array_of_samples())
 
-        self.raw_samples = np.reshape(self.raw_samples, (-1, self.channels))
-        self.sample_count = self.raw_samples.shape[0]
+        self.samples = np.reshape(self.samples, (-1, self.channels))
+        self.sample_count = self.samples.shape[0]
 
         self._make_spectrogram()
 
@@ -87,19 +87,33 @@ class Audio(object):
 
         frame_size = 256
         overlap = frame_size // 2
+        hop_size = frame_size - overlap
+        frame_count = int(np.ceil(self.sample_count / hop_size)) + 1
 
-        samples = self.raw_samples.copy()
+        samples = self.samples.copy()
+        # print(samples.shape)
         samples = np.mean(samples, axis=1)
+        # print(samples.shape)
         sample_max = (1 << (self.sample_width * 8 - 1)) - 1
         sample_min = ~sample_max
         # self.samples = util.lerp(self.samples, sample_min, sample_max, 0, 1)
         samples = samples / (sample_max + 1)
-        samples = np.concatenate((np.zeros(int(np.floor(frame_size / 2))), samples, np.zeros(int(np.ceil(frame_size / 2)))))
+        samples = np.concatenate((np.zeros(frame_size // 2), samples, np.zeros(frame_size // 2)))
+        # print(samples.shape)
 
-        hop_size = frame_size - overlap
-        frame_count = int(np.ceil(self.sample_count / hop_size)) + 1
-        # print(frame_size, frame_count)
-        frames = np.lib.stride_tricks.as_strided(samples, shape=(frame_count, frame_size), strides=(samples.strides[0] * hop_size, samples.strides[0]))
+        # frames = np.empty((frame_count, frame_size), dtype=samples.dtype)
+        # print(frames.shape)
+        # for frame, sample_idx in enumerate(range(self.sample_count, hop_size)):
+        #     try:
+        #         frames[frame] = samples[sample_idx : sample_idx + frame_size]
+        #     except:
+        #         print(frame, sample_idx, sample_idx + frame_size)
+        #         exit()
+        # print(frame_count, frame_size, (samples.strides[0] * hop_size, samples.strides[0]))
+
+        # TODO: breaks on test signal, probably some samples lengths cause problems, should custom implement
+        frames = np.lib.stride_tricks.as_strided(samples, shape=(frame_count, frame_size), strides=(samples.strides[0] * hop_size, samples.strides[0]), writeable=False).copy()
+        
         window = np.hamming(frame_size)
         frames *= window
         spec = np.abs(np.fft.rfft(frames, n=frame_size * 2 - 1))
@@ -178,10 +192,10 @@ class Audio(object):
 
     def _update_stream(self, in_data, frame_count, time_info, status_flags):
         end = self.stream_pos+frame_count
-        if end >= self.raw_samples.shape[0]:
-            end = self.raw_samples.shape[0]
+        if end >= self.samples.shape[0]:
+            end = self.samples.shape[0]
             self.stop()
-        data = self.raw_samples[self.stream_pos:end, :].flatten()
+        data = self.samples[self.stream_pos:end, :].flatten()
         data = (data * self.audio_volume).astype(data.dtype)
         self.stream_pos += frame_count
         return (data, pyaudio.paContinue)

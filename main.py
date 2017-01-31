@@ -21,6 +21,15 @@ def resample(x, n):
         coord_from = coords[i]
         coord_to = coords[i + 1]
 
+def split_spec(spec):
+    ranges = np.linspace(0, spec.shape[0], config.NUM_LED_CHANNELS + 1, dtype=np.int_)
+    for i in range(config.NUM_LED_CHANNELS):
+        spec_from = ranges[i]
+        spec_to = ranges[i + 1]
+        spec_range = spec_to - spec_from
+        channel_vals = resample(spec[spec_from:spec_to], config.NUM_LEDS // 2)
+        yield np.concatenate((channel_vals[::-1], channel_vals))
+
 
 TAIL_LEN = 0.5
 FPS_PRINT_INTERVAL = 5.0
@@ -63,13 +72,12 @@ if __name__ == '__main__':
             while vis.running:
                 pixels = np.zeros((config.NUM_LEDS, config.NUM_LED_CHANNELS), dtype=np.float64)
                 spec = audio.spectrogram(audio.elapsed_time)
-                ranges = np.linspace(0, spec.shape[0], config.NUM_LED_CHANNELS + 1, dtype=np.int_)
-                for i in range(config.NUM_LED_CHANNELS):
-                    spec_from = ranges[i]
-                    spec_to = ranges[i + 1]
-                    spec_range = spec_to - spec_from
-                    channel_vals = resample(spec[spec_from:spec_to], config.NUM_LEDS // 2)
-                    pixels[:, i] = np.concatenate((channel_vals[::-1], channel_vals))
+                vis.update_spec(spec)
+                hi, med, low = tuple(split_spec(spec))
+                # TODO: map to other hues besides RGB? (might need to be linearly independent)
+                pixels[:, 0] = low
+                pixels[:, 1] = hi
+                pixels[:, 2] = med
 
                 vis.send_pixels(pixels)
 

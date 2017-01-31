@@ -64,8 +64,8 @@ class Visualizer(object):
 
             self._send_pixels(pixels)
 
-            for c in range(3):
-                self.plots[c].setData(y=pixels[:, c])
+            for i, p in enumerate(self.channel_plots):
+                p.setData(y=pixels[:, i])
 
             dt = time.time() - self.start_time
             if dt > 0:
@@ -90,6 +90,9 @@ class Visualizer(object):
             self.arduino.write(bytes(data))
             self.arduino.read()
 
+    def update_spec(self, spec):
+        self.spec_plot_plot.setData(y=spec)
+
     def start(self):
         util.timer('Starting visualizer')
         self.view.show()
@@ -113,22 +116,31 @@ class Visualizer(object):
 
         self.view = pg.GraphicsView()
         self.view.closeEvent = lambda *args: self.stop()
-        self.view.resize(1000, 400)
+        self.view.resize(1000, 700)
         self.view.setWindowTitle('LED Music Visualizer')
 
         self.layout = pg.GraphicsLayout()
         self.view.setCentralItem(self.layout)
 
-        # TODO: make into bar graph https://stackoverflow.com/questions/36551044/how-to-plot-two-barh-in-one-axis-in-pyqtgraph
-        self.plot = self.layout.addPlot(title='LED Colors')
-        self.plot.hideButtons()
-        self.plot.setMouseEnabled(x=False, y=False)
-        self.plot.setYRange(0, 255, padding=0)
-        self.plot.getAxis('left').setTickSpacing(15, 3)
-        self.plots = []
-        for c in range(3):
-            self.plots.append(self.plot.plot(pen=tuple(255 if i == c else 0 for i in range(3))))
+        self.spec_plot = self.layout.addPlot(title='Spectrogram')
+        self.spec_plot.hideButtons()
+        self.spec_plot.setMouseEnabled(x=False, y=False)
+        self.spec_plot.setYRange(0.0, 1.0, padding=0)
+        self.spec_plot_plot = self.spec_plot.plot()
         self.layout.layout.setRowStretchFactor(0, 1)
+
+        self.layout.nextRow()
+
+        # TODO: make into bar graph https://stackoverflow.com/questions/36551044/how-to-plot-two-barh-in-one-axis-in-pyqtgraph
+        self.colors_plot = self.layout.addPlot(title='LED Colors')
+        self.colors_plot.hideButtons()
+        self.colors_plot.setMouseEnabled(x=False, y=False)
+        self.colors_plot.setYRange(0, 255, padding=0)
+        self.colors_plot.getAxis('left').setTickSpacing(15, 3)
+        self.channel_plots = []
+        for c in range(3):
+            self.channel_plots.append(self.colors_plot.plot(pen=tuple(255 if i == c else 0 for i in range(3))))
+        self.layout.layout.setRowStretchFactor(1, 1)
 
         self.layout.nextRow()
 
@@ -136,12 +148,12 @@ class Visualizer(object):
         self.led_viewer = LEDViewer()
         led_viewer_proxy.setWidget(self.led_viewer)
         self.layout.addItem(led_viewer_proxy)
-        self.layout.layout.setRowStretchFactor(1, 0)
+        self.layout.layout.setRowStretchFactor(2, 0)
 
         self.layout.nextRow()
 
         self.fps_label = self.layout.addLabel('')
-        self.layout.layout.setRowStretchFactor(2, 0)
+        self.layout.layout.setRowStretchFactor(3, 0)
 
         return self
 

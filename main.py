@@ -54,6 +54,7 @@ if __name__ == '__main__':
     parser.add_argument('-m', '--music_path', type=file, required=False)
     parser.add_argument('-b', '--brightness', type=float_normal, default=1.0)
     parser.add_argument('-v', '--volume', type=float_normal, default=0.5)
+    parser.add_argument('-d', '--show_debug_window', action='store_true')
     args = parser.parse_args()
 
     with Visualizer(use_arduino=args.use_arduino, brightness=args.brightness) as vis:
@@ -64,7 +65,7 @@ if __name__ == '__main__':
             signal.signal(signal.SIGINT, sigint)
             gui.view.closeEvent = lambda *args: vis.stop()
 
-            gui.start()
+            gui.start(args.show_debug_window)
 
             vis.start()
             audio.start()

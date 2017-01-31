@@ -2,6 +2,7 @@ import time
 import pydub
 import pyaudio
 import numpy as np
+import pyqtgraph as pg
 # from scipy import signal as sig
 
 import config
@@ -118,14 +119,13 @@ class Audio(object):
         window = np.hamming(frame_size)
         frames *= window
         spec = np.abs(np.fft.rfft(frames, n=frame_size * 2 - 1))
-        print(np.min(spec), np.mean(spec), np.max(spec))
 
         time_bins, freq_bins = spec.shape
         # TODO: may need to adjust freq scale
         freq_scale = np.linspace(0, 1, freq_bins, endpoint=False) ** 20
         # print(freq_scale)
         freq_scale *= freq_bins - 1
-        gui.add_debug_plot(
+        gui.debug_layout.addPlot(
             row=0,
             col=0,
             title='Frequency Scale by Frequency',
@@ -144,16 +144,14 @@ class Audio(object):
                 scaled_spec[:, i] = np.mean(spec[:, freq_scale[i]:freq_scale[i+1]], axis=1)
         spec = scaled_spec
 
-        print(np.min(spec), np.mean(spec), np.max(spec))
         spec = util.lerp(spec, np.percentile(spec, 5), np.percentile(spec, 95), 0, 1)
-        print(np.min(spec), np.mean(spec), np.max(spec))
         np.clip(spec, 0, 1, out=spec)
 
         power_scale_min = 0.1
         power_scale_max = 2
         power_scale_power = 3
         power_scale = util.lerp(np.linspace(0, 1, spec.shape[1]) ** power_scale_power, 0, 1, power_scale_min, power_scale_max)
-        gui.add_debug_plot(
+        gui.debug_layout.addPlot(
             row=0,
             col=1,
             title='Power Scale by Frequency',
@@ -165,7 +163,7 @@ class Audio(object):
         def power_map(x):
             return x ** (1 / 2)
         debug_power_vals = np.linspace(0, 1, 1000)
-        gui.add_debug_plot(
+        gui.debug_layout.addPlot(
             row=1,
             col=0,
             title='Power Scale by Power',
@@ -175,13 +173,13 @@ class Audio(object):
         )
         spec = power_map(spec)
 
-        # hist_bins, hist_bin_step = np.linspace(0, 1, 1000, retstep=True)
-        # hist_vals, hist_bins = np.histogram(spec, bins=hist_bins, density=True)
-        # hist_vals *= hist_bin_step
-        # # print(hist_vals, hist_bins)
-        # gui.add_debug_plot(
+        # hist_vals, hist_bins = np.histogram(spec)
+        # gui.debug_layout.addPlot(
+        #     row=2,
+        #     col=0,
+        #     colspan=2,
         #     title='Spectrogram Histogram',
-        #     labels={'left': 'Proportion of Spectrogram Samples', 'bottom': 'Power'},
+        #     labels={'left': 'Spectrogram Samples', 'bottom': 'Power'},
         #     x=hist_bins[:-1],
         #     y=hist_vals
         # )
@@ -189,14 +187,14 @@ class Audio(object):
         util.gaussian_filter1d(spec, sigma=1, axis=0, output=spec) # blur time axis
         # util.gaussian_filter1d(spec, sigma=0.2, axis=1, output=spec) # blur freq axis
 
-        gui.add_debug_plot(
+        gui.debug_layout.addPlot(
             row=1,
             col=1,
             title='Average Power by Frequency',
             labels={'left': 'Power', 'bottom': 'Frequency'},
             y=np.mean(spec, axis=0)
         )
-        gui.add_debug_plot(
+        gui.debug_layout.addPlot(
             row=2,
             col=0,
             colspan=2,
@@ -205,6 +203,13 @@ class Audio(object):
             x=np.linspace(0, self.sample_count / self.sample_rate, spec.shape[0]),
             y=np.mean(spec, axis=1)
         )
+        gui.debug_layout.addViewBox(
+            row=3,
+            col=0,
+            colspan=2
+        ).addItem(pg.ImageItem(
+            image=spec
+        ))
 
         self._spectrogram = spec
         # from matplotlib import pyplot as plt

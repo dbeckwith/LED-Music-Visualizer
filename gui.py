@@ -95,13 +95,11 @@ class GUI(object):
         if not self.closed:
             self.time_label.setText('Elapsed Time: {}'.format(datetime.timedelta(seconds=time)))
 
-    def add_debug_plot(self, *args, **kwargs):
-        return self.debug_layout.addPlot(*args, **kwargs)
-
-    def start(self):
+    def start(self, show_debug_window=False):
         util.timer('Showing GUI')
 
-        self.debug_view.show()
+        if show_debug_window:
+            self.debug_view.show()
         self.view.show()
         self.app.processEvents()
         self.closed = False

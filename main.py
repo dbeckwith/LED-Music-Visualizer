@@ -74,8 +74,10 @@ if __name__ == '__main__':
             util.timer('Running visualization')
 
             while vis.running:
+                t = audio.elapsed_time
+
                 pixels = np.zeros((config.NUM_LEDS, config.NUM_LED_CHANNELS), dtype=np.float64)
-                spec = audio.spectrogram(audio.elapsed_time)
+                spec = audio.spectrogram(t)
                 hi, med, low = tuple(split_spec(spec))
                 # TODO: map to other hues besides RGB? (might need to be linearly independent)
                 pixels[:, 0] = low
@@ -84,8 +86,9 @@ if __name__ == '__main__':
 
                 vis.send_pixels(pixels)
                 frames += 1
-                gui.update_fps(frames / audio.elapsed_time)
 
+                gui.update_fps(frames / t)
+                gui.update_time(t)
                 gui.update_leds(pixels)
                 gui.update_spec(spec)
 
@@ -100,3 +103,6 @@ if __name__ == '__main__':
                 
     gui.stop()
     util.timer()
+
+    import pyqtgraph
+    pyqtgraph.exit()

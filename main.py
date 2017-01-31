@@ -49,15 +49,15 @@ if __name__ == '__main__':
         return x
 
     import argparse
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-a', '--use_arduino', action='store_true')
-    parser.add_argument('-m', '--music_path', type=file, required=False)
-    parser.add_argument('-b', '--brightness', type=float_normal, default=1.0)
-    parser.add_argument('-v', '--volume', type=float_normal, default=0.5)
-    parser.add_argument('-d', '--show_debug_window', action='store_true')
+    parser = argparse.ArgumentParser(description='LED Music Visualizer by Daniel Beckwith')
+    parser.add_argument('-l', '--use_leds', action='store_true', help='Connect to external LED setup and send pixel values for visualization.')
+    parser.add_argument('-b', '--brightness', type=float_normal, default=1.0, help='LED brightness factor from 0 to 1.')
+    parser.add_argument('-m', '--music_path', type=file, required=False, help='Path to MP3 file to use for visualization. If not given, a test signal is used.')
+    parser.add_argument('-v', '--volume', type=float_normal, default=0.5, help='Music volume from 0 to 1.')
+    parser.add_argument('-d', '--show_debug_window', action='store_true', help='Show the debug window.')
     args = parser.parse_args()
 
-    with Visualizer(use_arduino=args.use_arduino, brightness=args.brightness) as vis:
+    with Visualizer(use_leds=args.use_leds, brightness=args.brightness) as vis:
         with Audio(args.music_path, audio_volume=args.volume) as audio:
             def sigint(signum, frame):
                 vis.stop()
@@ -80,16 +80,18 @@ if __name__ == '__main__':
                 pixels = np.zeros((config.NUM_LEDS, config.NUM_LED_CHANNELS), dtype=np.float64)
                 spec = audio.spectrogram(t)
                 # TODO: might be wrong about if low is lower part or higher part?? need to try with test signal
-                low, med, hi = tuple(split_spec(spec, config.NUM_LEDS // 2))
+                # I think I thought low indicies were high frequencies just because EVERYTHING is in the low indicies
+                # should do some tests (or use np.fft.fftfreq) to see what the actual frequencies are
+                low, mid, hi = tuple(split_spec(spec, config.NUM_LEDS // 2))
                 # TODO: map to other hues besides RGB? (might need to be linearly independent)
                 pixels[:, 0] = np.concatenate((low[::-1], low))
                 pixels[:, 1] = np.concatenate((hi[::-1], hi))
-                pixels[:, 2] = np.concatenate((med, med[::-1]))
+                pixels[:, 2] = np.concatenate((mid, mid[::-1]))
 
                 vis.send_pixels(pixels)
                 frames += 1
 
-                gui.update_fps(frames / t)
+                if t > 0: gui.update_fps(frames / t)
                 gui.update_time(t)
                 gui.update_leds(pixels)
                 gui.update_spec(spec)
@@ -98,6 +100,7 @@ if __name__ == '__main__':
 
                 # TODO: if fps too high, graph won't update
                 if not args.use_arduino:
+                if not args.use_leds:
                     time.sleep(0.01)
 
                 if not audio.running:

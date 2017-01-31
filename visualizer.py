@@ -25,12 +25,12 @@ def _get_arduino_port():
     return None
 
 def _open_arduino_com():
+    util.timer('Connecting to Arduino')
     import serial
     port = _get_arduino_port()
     if port is None:
         print('No Arduino connected')
         exit()
-    util.timer('Connecting to Arduino'.format(port))
     print('Connecting to Arduino on {}'.format(port))
     com = serial.Serial(
         port = port,
@@ -41,8 +41,8 @@ def _open_arduino_com():
     return com
 
 class Visualizer(object):
-    def __init__(self, use_arduino=True, brightness=1.0):
-        self.use_arduino = use_arduino
+    def __init__(self, use_leds=True, brightness=1.0):
+        self.use_leds = use_leds
         self.brightness = np.clip(brightness, 0.0, 1.0)
         self.running = False
 
@@ -63,7 +63,7 @@ class Visualizer(object):
             self._send_pixels(pixels)
 
     def _send_pixels(self, pixels):
-        if self.use_arduino:
+        if self.use_leds:
             data = []
             for index, color in enumerate(pixels):
                 data.append(index)
@@ -81,13 +81,13 @@ class Visualizer(object):
             self.running = False
 
     def __enter__(self, *args):
-        if self.use_arduino:
+        if self.use_leds:
             self.arduino = _open_arduino_com().__enter__(*args)
 
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
-        if self.use_arduino:
+        if self.use_leds:
             util.timer('Disconnecting from Arduino')
             self._send_off()
             self.arduino.close()

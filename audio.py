@@ -67,6 +67,7 @@ class Audio(object):
 
         self.samples = np.reshape(self.samples, (-1, self.channels))
         self.sample_count = self.samples.shape[0]
+        print('Samples: {:,d}'.format(self.sample_count))
 
         self._make_spectrogram()
 
@@ -121,7 +122,7 @@ class Audio(object):
         spec = np.abs(np.fft.rfft(frames, n=frame_size * 2 - 1))
 
         time_bins, freq_bins = spec.shape
-        # TODO: may need to adjust freq scale
+        # TODO: may need to adjust freq scale, might be able to do this whole freq scaling better anyway
         freq_scale = np.linspace(0, 1, freq_bins, endpoint=False) ** 20
         # print(freq_scale)
         freq_scale *= freq_bins - 1

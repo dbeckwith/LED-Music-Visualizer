@@ -8,6 +8,39 @@ import config
 import util
 
 
+class ExpFilter:
+    """Simple exponential smoothing filter"""
+    def __init__(self, val=0.0, alpha_decay=0.5, alpha_rise=0.5):
+        """Small rise / decay factors = more smoothing"""
+        assert 0.0 < alpha_decay < 1.0, 'Invalid decay smoothing factor'
+        assert 0.0 < alpha_rise < 1.0, 'Invalid rise smoothing factor'
+        self.alpha_decay = alpha_decay
+        self.alpha_rise = alpha_rise
+        self.value = val
+
+    def update(self, value):
+        if isinstance(self.value, (list, np.ndarray, tuple)):
+            alpha = value - self.value
+            alpha[alpha > 0.0] = self.alpha_rise
+            alpha[alpha <= 0.0] = self.alpha_decay
+        else:
+            alpha = self.alpha_rise if value > self.value else self.alpha_decay
+        self.value = alpha * value + (1.0 - alpha) * self.value
+        return self.value
+
+_smoothing_filters = {}
+def smooth(alpha_decay=0.5, alpha_rise=0.5):
+    def decorator(f):
+        def new_f(*args, **kwargs):
+            val = f(*args, **kwargs)
+            if f not in _smoothing_filters:
+                _smoothing_filters[f] = ExpFilter(val, alpha_decay, alpha_rise)
+                return val
+            else:
+                return _smoothing_filters[f].update(val)
+        return new_f
+    return decorator
+
 class Audio(object):
     def __init__(self, path, audio_volume=1.0):
         self.path = path
@@ -22,7 +55,7 @@ class Audio(object):
             self.raw_samples = np.cos(2 * np.pi * (1000 * self.raw_samples + 100 * np.sin(2 * np.pi * 0.5 * self.raw_samples)))
             self.raw_samples = (self.raw_samples * ((1 << 15) - 1)).astype(np.int16)
         else:
-            util.timer('Loading audio from {}'.format(path))
+            util.timer('Loading audio')
             print('Loading audio from {}'.format(path))
             seg = pydub.AudioSegment.from_mp3(path)
             self.sample_rate = seg.frame_rate
@@ -52,54 +85,74 @@ class Audio(object):
     def _make_spectrogram(self):
         util.timer('Creating spectrogram')
 
-        # TODO: things to fix
-        # overlap window
-        # get frame size right
-        # scale values using np.fft.fftfreq
-        # time filter like scott lawsons' expfilter
-
-        overlap = 0.5
-        frame_size = 128
+        frame_size = 256
+        overlap = frame_size // 2
 
         samples = self.raw_samples.copy()
         samples = np.mean(samples, axis=1)
         sample_max = (1 << (self.sample_width * 8 - 1)) - 1
         sample_min = ~sample_max
-        # self.samples = (self.samples - sample_min) / (sample_max - sample_min)
+        # self.samples = util.lerp(self.samples, sample_min, sample_max, 0, 1)
         samples = samples / (sample_max + 1)
         samples = np.concatenate((np.zeros(int(np.floor(frame_size / 2))), samples, np.zeros(int(np.ceil(frame_size / 2)))))
 
-        hop_size = frame_size - int(np.floor(overlap * frame_size))
+        hop_size = frame_size - overlap
         frame_count = int(np.ceil(self.sample_count / hop_size)) + 1
         # print(frame_size, frame_count)
         frames = np.lib.stride_tricks.as_strided(samples, shape=(frame_count, frame_size), strides=(samples.strides[0] * hop_size, samples.strides[0]))
         window = np.hamming(frame_size)
         frames *= window
-        spec = np.fft.rfft(frames, n=frame_size * 2 - 1)
-        # print(spec.shape)
-        # TODO: resulting spec too small? too much interpolation neccessary
+        spec = np.abs(np.fft.rfft(frames, n=frame_size * 2 - 1))
+        print(np.min(spec), np.mean(spec), np.max(spec))
 
         time_bins, freq_bins = spec.shape
-        freq_scale = np.linspace(0, 1, freq_bins) ** 1
+        freq_scale = np.linspace(0, 1, freq_bins, endpoint=False) ** 20
+        # print(freq_scale)
         freq_scale *= freq_bins - 1
         freq_scale = np.unique(np.round(freq_scale).astype(np.int_))
+        # print(freq_scale)
         new_freq_bins = freq_scale.shape[0]
 
-        scaled_spec = np.zeros((time_bins, new_freq_bins), dtype=np.complex128)
+        scaled_spec = np.zeros((time_bins, new_freq_bins), dtype=spec.dtype)
         for i in range(new_freq_bins):
             if i == new_freq_bins - 1:
-                scaled_spec[:, i] = np.sum(spec[:, freq_scale[i]:], axis=1)
+                scaled_spec[:, i] = np.mean(spec[:, freq_scale[i]:], axis=1)
             else:
-                scaled_spec[:, i] = np.sum(spec[:, freq_scale[i]:freq_scale[i+1]], axis=1)
+                scaled_spec[:, i] = np.mean(spec[:, freq_scale[i]:freq_scale[i+1]], axis=1)
+        spec = scaled_spec
 
-        self._spectrogram = scaled_spec
+        # spec = np.log10(spec)
+        print(np.min(spec), np.mean(spec), np.max(spec))
+        spec = util.lerp(spec, np.percentile(spec, 5), np.percentile(spec, 95), 0, 1)
+        print(np.min(spec), np.mean(spec), np.max(spec)) # TODO: final scale is pretty low for Such Great Heights?
+        np.clip(spec, 0, 1, out=spec)
+
+        power_scale_min = 0.2
+        power_scale_max = 1
+        power_scale_power = 1
+        power_scale = util.lerp(np.linspace(0, 1, spec.shape[1]) ** power_scale_power, 0, 1, power_scale_min, power_scale_max)
+        spec *= power_scale
+
+        spec **= 1 / 1
+
+        # spec *= 10
+
+        util.gaussian_filter1d(spec, sigma=1, axis=0, output=spec)
+        util.gaussian_filter1d(spec, sigma=-0.5, axis=1, output=spec)
+
+        self._spectrogram = spec
         # from matplotlib import pyplot as plt
-        # plt.imshow(np.abs(self._spectrogram))
+        # plt.imshow(self._spectrogram[:1000], cmap='gray')
         # plt.show()
         # exit()
 
+    @smooth(alpha_decay=0.2, alpha_rise=0.99)
     def spectrogram(self, t):
         spec_idx = t * self._spectrogram.shape[0] * self.sample_rate / self.sample_count
+        if spec_idx <= 0:
+            return self._spectrogram[0]
+        if spec_idx >= self._spectrogram.shape[0] - 1:
+            return self._spectrogram[-1]
         i1 = np.floor(spec_idx)
         i2 = np.ceil(spec_idx)
         if i1 == i2:

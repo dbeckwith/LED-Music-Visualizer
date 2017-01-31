@@ -58,7 +58,7 @@ class Visualizer(object):
     def send_pixels(self, pixels):
         if self.running:
             assert pixels.shape in ((config.NUM_LEDS,), (config.NUM_LEDS, config.NUM_LED_CHANNELS))
-            pixels = (np.clip(pixels * self.brightness, 0.0, 1.0) * 0xFF).astype(np.uint8)
+            pixels = (np.clip(pixels * self.brightness, 0.0, self.brightness) * 0xFF).astype(np.uint8)
             if pixels.ndim == 1:
                 pixels = np.tile(pixels, (config.NUM_LED_CHANNELS, 1)).T
 
@@ -71,7 +71,7 @@ class Visualizer(object):
             if dt > 0:
                 self.fps_label.setText('FPS: {:.1f}'.format(self.frames / dt))
 
-            self.led_viewer.set_colors(pixels)
+            self.led_viewer.set_colors((pixels / self.brightness).astype(np.uint8))
 
             self.app.processEvents()
 
@@ -113,12 +113,13 @@ class Visualizer(object):
 
         self.view = pg.GraphicsView()
         self.view.closeEvent = lambda *args: self.stop()
-        self.view.resize(1280, 800)
+        self.view.resize(1000, 400)
         self.view.setWindowTitle('LED Music Visualizer')
 
         self.layout = pg.GraphicsLayout()
         self.view.setCentralItem(self.layout)
 
+        # TODO: make into bar graph https://stackoverflow.com/questions/36551044/how-to-plot-two-barh-in-one-axis-in-pyqtgraph
         self.plot = self.layout.addPlot(title='LED Colors')
         self.plot.hideButtons()
         self.plot.setMouseEnabled(x=False, y=False)

@@ -52,10 +52,19 @@ if __name__ == '__main__':
             vis.start()
             audio.start()
 
+            util.timer('Running visualiztion')
+
             while vis.running:
+                pixels = np.zeros((config.NUM_LEDS, config.NUM_LED_CHANNELS), dtype=np.float64)
                 spec = audio.spectrogram(audio.elapsed_time)
-                spec = np.abs(spec)
-                pixels = np.interp(np.arange(60), np.arange(spec.shape[0]), spec)
+                ranges = np.linspace(0, spec.shape[0], config.NUM_LED_CHANNELS + 1, dtype=np.int_)
+                for i in range(config.NUM_LED_CHANNELS):
+                    spec_from = ranges[i]
+                    spec_to = ranges[i + 1]
+                    spec_range = spec_to - spec_from
+                    # TODO: since less channel vals then in spec, need to mean over all the spec vals each channel val covers, not interp
+                    channel_vals = np.interp(np.linspace(0, spec_range, config.NUM_LEDS // 2, endpoint=False), np.arange(spec_range), spec[spec_from:spec_to])
+                    pixels[:, i] = np.concatenate((channel_vals[::-1], channel_vals))
 
                 # pixels = np.zeros((config.NUM_LEDS, config.NUM_LED_CHANNELS), dtype=np.float32)
                 # for c in range(config.NUM_LED_CHANNELS):

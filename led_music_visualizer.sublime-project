@@ -17,5 +17,18 @@
 			],
 			"path": "."
 		}
-	]
+	],
+	"settings":
+	{
+		"todoreview":
+		{
+			"exclude_folders":
+			[
+				"*.git*",
+				"*Include*",
+				"*Lib*",
+				"*tcl*"
+			]
+		}
+	}
 }

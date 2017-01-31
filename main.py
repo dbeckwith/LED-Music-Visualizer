@@ -22,14 +22,14 @@ def resample(x, n):
         coord_from = coords[i]
         coord_to = coords[i + 1]
 
-def split_spec(spec):
+def split_spec(spec, n):
     ranges = np.linspace(0, spec.shape[0], config.NUM_LED_CHANNELS + 1, dtype=np.int_)
     for i in range(config.NUM_LED_CHANNELS):
         spec_from = ranges[i]
         spec_to = ranges[i + 1]
         spec_range = spec_to - spec_from
-        channel_vals = resample(spec[spec_from:spec_to], config.NUM_LEDS // 2)
-        yield np.concatenate((channel_vals[::-1], channel_vals))
+        channel_vals = resample(spec[spec_from:spec_to], n)
+        yield channel_vals
 
 
 TAIL_LEN = 0.5
@@ -79,11 +79,12 @@ if __name__ == '__main__':
 
                 pixels = np.zeros((config.NUM_LEDS, config.NUM_LED_CHANNELS), dtype=np.float64)
                 spec = audio.spectrogram(t)
-                hi, med, low = tuple(split_spec(spec))
+                # TODO: might be wrong about if low is lower part or higher part?? need to try with test signal
+                low, med, hi = tuple(split_spec(spec, config.NUM_LEDS // 2))
                 # TODO: map to other hues besides RGB? (might need to be linearly independent)
-                pixels[:, 0] = low
-                pixels[:, 1] = hi
-                pixels[:, 2] = med
+                pixels[:, 0] = np.concatenate((low[::-1], low))
+                pixels[:, 1] = np.concatenate((hi[::-1], hi))
+                pixels[:, 2] = np.concatenate((med, med[::-1]))
 
                 vis.send_pixels(pixels)
                 frames += 1

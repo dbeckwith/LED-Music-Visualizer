@@ -7,6 +7,7 @@ import config
 import util
 from visualizer import Visualizer
 from audio import Audio
+from gui import gui
 
 
 def resample(x, n):
@@ -57,22 +58,24 @@ if __name__ == '__main__':
 
     with Visualizer(use_arduino=args.use_arduino, brightness=args.brightness) as vis:
         with Audio(args.music_path, audio_volume=args.volume) as audio:
-            offsets = np.array([0, -TAIL_LEN*1.5, -TAIL_LEN*3.0], dtype=np.float32)
-
             def sigint(signum, frame):
                 vis.stop()
                 signal.signal(signal.SIGINT, signal.SIG_DFL)
             signal.signal(signal.SIGINT, sigint)
+            gui.view.closeEvent = lambda *args: vis.stop()
+
+            gui.start()
 
             vis.start()
             audio.start()
+
+            frames = 0
 
             util.timer('Running visualization')
 
             while vis.running:
                 pixels = np.zeros((config.NUM_LEDS, config.NUM_LED_CHANNELS), dtype=np.float64)
                 spec = audio.spectrogram(audio.elapsed_time)
-                vis.update_spec(spec)
                 hi, med, low = tuple(split_spec(spec))
                 # TODO: map to other hues besides RGB? (might need to be linearly independent)
                 pixels[:, 0] = low
@@ -80,8 +83,20 @@ if __name__ == '__main__':
                 pixels[:, 2] = med
 
                 vis.send_pixels(pixels)
+                frames += 1
+                gui.update_fps(frames / audio.elapsed_time)
+
+                gui.update_leds(pixels)
+                gui.update_spec(spec)
+
+                gui.app.processEvents()
+
+                # TODO: if fps too high, graph won't update
+                if not args.use_arduino:
+                    time.sleep(0.01)
 
                 if not audio.running:
                     vis.stop()
-                    
+                
+    gui.stop()
     util.timer()

@@ -1,0 +1,6 @@
+numpy==1.12.0
+PyAudio==0.2.10
+pydub==0.16.7
+PyQt4==4.11.4
+pyqtgraph==0.10.0
+pyserial==3.2.1

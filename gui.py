@@ -9,6 +9,9 @@ import util
 
 class GUI(object):
     def __init__(self):
+        self.closed = True
+
+    def setup(self):
         util.timer('Initializing GUI')
 
         app = QtGui.QApplication([])
@@ -73,8 +76,6 @@ class GUI(object):
 
         self.debug_view = debug_view
         self.debug_layout = debug_layout
-
-        self.closed = True
 
     def update_leds(self, pixels):
         if not self.closed:

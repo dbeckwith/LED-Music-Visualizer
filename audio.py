@@ -122,7 +122,7 @@ class Audio(object):
         spec = np.abs(np.fft.rfft(frames, n=frame_size * 2 - 1))
 
         time_bins, freq_bins = spec.shape
-        # TODO: may need to adjust freq scale, might be able to do this whole freq scaling better anyway
+        # TODO: replace all this scaling stuff with mel (http://practicalcryptography.com/miscellaneous/machine-learning/guide-mel-frequency-cepstral-coefficients-mfccs/)
         freq_scale = np.linspace(0, 1, freq_bins, endpoint=False) ** 20
         # print(freq_scale)
         freq_scale *= freq_bins - 1

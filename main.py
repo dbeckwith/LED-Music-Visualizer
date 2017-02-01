@@ -10,25 +10,13 @@ from audio import Audio
 from gui import gui
 
 
-def resample(x, n):
-    if n == x.shape[0]:
-        return x.copy()
-    if n > x.shape[0]:
-        return np.interp(np.linspace(0, x.shape[0], n, endpoint=False), np.arange(x.shape[0]), x)
-    raise NotImplementedError
-    # TODO: upsampling
-    coords = np.linspace(0, x.shape[0], n + 1, endpoint=True)
-    for i in range(n):
-        coord_from = coords[i]
-        coord_to = coords[i + 1]
-
 def split_spec(spec, n):
     ranges = np.linspace(0, spec.shape[0], config.NUM_LED_CHANNELS + 1, dtype=np.int_)
     for i in range(config.NUM_LED_CHANNELS):
         spec_from = ranges[i]
         spec_to = ranges[i + 1]
         spec_range = spec_to - spec_from
-        channel_vals = resample(spec[spec_from:spec_to], n)
+        channel_vals = np.interp(np.linspace(0, 1, n), np.linspace(0, 1, spec_to - spec_from), spec[spec_from:spec_to])
         yield channel_vals
 
 
@@ -56,6 +44,8 @@ if __name__ == '__main__':
     parser.add_argument('-v', '--volume', type=float_normal, default=0.5, help='Music volume from 0 to 1.')
     parser.add_argument('-d', '--show_debug_window', action='store_true', help='Show the debug window.')
     args = parser.parse_args()
+
+    gui.setup()
 
     with Visualizer(use_leds=args.use_leds, brightness=args.brightness) as vis:
         with Audio(args.music_path, audio_volume=args.volume) as audio:
@@ -99,7 +89,6 @@ if __name__ == '__main__':
                 gui.app.processEvents()
 
                 # TODO: if fps too high, graph won't update
-                if not args.use_arduino:
                 if not args.use_leds:
                     time.sleep(0.01)
 

@@ -1,44 +1,11 @@
-import time
-import re
+import socket
+import struct
+import json
 import numpy as np
 
 import config
 import util
 
-
-def _get_arduino_port():
-    from serial.tools.list_ports import comports as list_ports
-    for info in list_ports():
-        vendor = getattr(info, 'vid', None)
-        if vendor is None:
-            try:
-                m = re.search(r'VID(?::PID)?=(?P<vendor>[0-9a-fA-F]+)', info[2])
-                vendor = int(m.group('vendor'), base=16)
-            except:
-                vendor = None
-        # http://www.linux-usb.org/usb.ids
-        if vendor == 0x2341:
-            port = getattr(info, 'device', None)
-            if port is None:
-                port = info[0]
-            return port
-    return None
-
-def _open_arduino_com():
-    util.timer('Connecting to Arduino')
-    import serial
-    port = _get_arduino_port()
-    if port is None:
-        print('No Arduino connected')
-        exit()
-    print('Connecting to Arduino on {}'.format(port))
-    com = serial.Serial(
-        port = port,
-        baudrate = 115200,
-        timeout = 1.0
-    )
-    time.sleep(3)
-    return com
 
 class Visualizer(object):
     def __init__(self, use_leds=True, brightness=1.0):
@@ -56,7 +23,7 @@ class Visualizer(object):
     def send_pixels(self, pixels):
         if self.running:
             assert pixels.shape in ((config.NUM_LEDS,), (config.NUM_LEDS, config.NUM_LED_CHANNELS))
-            pixels = (np.clip(pixels * self.brightness, 0.0, self.brightness) * 0xFF).astype(np.uint8)
+            pixels = (np.clip(pixels, 0.0, 1.0) * 0xFF).astype(np.uint8)
             if pixels.ndim == 1:
                 pixels = np.tile(pixels, (config.NUM_LED_CHANNELS, 1)).T
 
@@ -64,12 +31,7 @@ class Visualizer(object):
 
     def _send_pixels(self, pixels):
         if self.use_leds:
-            data = []
-            for index, color in enumerate(pixels):
-                data.append(index)
-                data.extend(color)
-            self.arduino.write(bytes(data))
-            self.arduino.read()
+            self.fadecandy.send_pixels(pixels)
 
     def start(self):
         util.timer('Starting visualizer')
@@ -82,12 +44,52 @@ class Visualizer(object):
 
     def __enter__(self, *args):
         if self.use_leds:
-            self.arduino = _open_arduino_com().__enter__(*args)
+            util.timer('Connecting to LEDs')
+            self.fadecandy = FadeCandy()
+            self.fadecandy.connect()
+            self.fadecandy.send_color_settings(
+                gamma=2.5,
+                r=self.brightness * 1.0,
+                g=self.brightness * 0.8,
+                b=self.brightness * 0.7
+            )
 
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
         if self.use_leds:
-            util.timer('Disconnecting from Arduino')
+            util.timer('Disconnecting from LEDs')
             self._send_off()
-            self.arduino.close()
+            self.fadecandy.disconnect()
+
+# http://openpixelcontrol.org/
+class FadeCandy(object):
+    def __init__(self):
+        self.host = config.FADECANDY_HOST
+        self.port = config.FADECANDY_PORT
+
+        self.socket = None
+
+    def connect(self):
+        if self.socket is not None:
+            self.disconnect()
+        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.socket.connect((self.host, self.port))
+        self.socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, True)
+
+    def send_color_settings(self, gamma, r, g, b):
+        msg = bytes(json.dumps({'gamma': gamma, 'whitepoint': [r, g, b]}), 'utf-8')
+        header = struct.pack('>BBHHH', 0, 0xFF, 4 + len(msg), 1, 1)
+        self.socket.send(header + msg)
+
+    def send_pixels(self, pixels, channel=0):
+        assert pixels.ndim == 2
+        assert pixels.shape[1] == 3
+        assert pixels.dtype == np.uint8
+        pixels = bytes(pixels)
+        header = struct.pack('>BBH', channel, 0x00, len(pixels))
+        self.socket.send(header + pixels)
+
+    def disconnect(self):
+        if self.socket is not None:
+            self.socket.close()

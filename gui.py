@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 import datetime
 import numpy as np
 from pyqtgraph.Qt import QtGui

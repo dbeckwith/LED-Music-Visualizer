@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 PIXEL_COUNT = 60
 CHANNELS_PER_PIXEL = 3
 

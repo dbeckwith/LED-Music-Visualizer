@@ -35,7 +35,7 @@ class GUI(object):
         layout.nextRow()
 
         # TODO: make into bar graph https://stackoverflow.com/questions/36551044/how-to-plot-two-barh-in-one-axis-in-pyqtgraph
-        colors_plot = layout.addPlot(title='LED Colors')
+        colors_plot = layout.addPlot(title='Pixel Colors')
         colors_plot.hideButtons()
         colors_plot.setMouseEnabled(x=False, y=False)
         colors_plot.setYRange(0.0, 1.0, padding=0)
@@ -46,10 +46,10 @@ class GUI(object):
         layout.layout.setRowStretchFactor(1, 1)
         layout.nextRow()
 
-        led_viewer_proxy = QtGui.QGraphicsProxyWidget(layout)
-        led_viewer = LEDViewer()
-        led_viewer_proxy.setWidget(led_viewer)
-        layout.addItem(led_viewer_proxy)
+        pixel_viewer_proxy = QtGui.QGraphicsProxyWidget(layout)
+        pixel_viewer = PixelViewer()
+        pixel_viewer_proxy.setWidget(pixel_viewer)
+        layout.addItem(pixel_viewer_proxy)
 
         layout.layout.setRowStretchFactor(2, 0)
         layout.nextRow()
@@ -72,7 +72,7 @@ class GUI(object):
         self.view = view
         self.spec_plot_plot = spec_plot_plot
         self.channel_plots = channel_plots
-        self.led_viewer = led_viewer
+        self.pixel_viewer = pixel_viewer
         self.fps_label = fps_label
         self.time_label = time_label
 
@@ -84,12 +84,12 @@ class GUI(object):
             self.on_close()
         event.accept()
 
-    def update_leds(self, pixels):
+    def update_pixels(self, pixels):
         if not self.closed:
             for i, p in enumerate(self.channel_plots):
                 p.setData(y=pixels[:, i])
 
-            self.led_viewer.set_colors(pixels)
+            self.pixel_viewer.set_colors(pixels)
 
     def update_spec(self, spec):
         if not self.closed:
@@ -120,7 +120,7 @@ class GUI(object):
         self.debug_view.close()
         self.app.quit()
 
-class LEDViewer(QtGui.QGraphicsView):
+class PixelViewer(QtGui.QGraphicsView):
     def __init__(self, parent=None):
         super().__init__(parent)
 
@@ -132,18 +132,18 @@ class LEDViewer(QtGui.QGraphicsView):
         size = 10
         spacing = 4
 
-        self.leds = []
-        for i in range(config.NUM_LEDS):
-            led = scene.addEllipse(i * (size + spacing), 0.0, size, size)
-            led.setPen(QtGui.QPen(QtGui.QBrush(QtGui.QColor(127, 127, 127)), 1.0))
-            led.setBrush(QtGui.QBrush(QtGui.QColor(0, 0, 0)))
-            self.leds.append(led)
+        self.pixels = []
+        for i in range(config.PIXEL_COUNT):
+            pixel = scene.addEllipse(i * (size + spacing), 0.0, size, size)
+            pixel.setPen(QtGui.QPen(QtGui.QBrush(QtGui.QColor(127, 127, 127)), 1.0))
+            pixel.setBrush(QtGui.QBrush(QtGui.QColor(0, 0, 0)))
+            self.pixels.append(pixel)
 
         self.setScene(scene)
 
     def set_colors(self, colors):
         colors = (colors * 0xFF).astype(np.uint8)
-        for i, led in enumerate(self.leds):
-            led.setBrush(QtGui.QBrush(QtGui.QColor(*colors[i])))
+        for i, pixel in enumerate(self.pixels):
+            pixel.setBrush(QtGui.QBrush(QtGui.QColor(*colors[i])))
 
 gui = GUI()

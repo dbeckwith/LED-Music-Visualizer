@@ -11,8 +11,8 @@ from gui import gui
 
 
 def split_spec(spec, n):
-    ranges = np.linspace(0, spec.shape[0], config.NUM_LED_CHANNELS + 1, dtype=np.int_)
-    for i in range(config.NUM_LED_CHANNELS):
+    ranges = np.linspace(0, spec.shape[0], config.CHANNELS_PER_PIXEL + 1, dtype=np.int_)
+    for i in range(config.CHANNELS_PER_PIXEL):
         spec_from = ranges[i]
         spec_to = ranges[i + 1]
         spec_range = spec_to - spec_from
@@ -48,7 +48,7 @@ if __name__ == '__main__':
     gui.setup()
 
     with Visualizer(use_leds=not args.test_mode, brightness=args.brightness) as vis:
-        with Audio(args.audio_path, audio_volume=args.volume, spectrogram_width=int(config.NUM_LEDS / 2 * config.NUM_LED_CHANNELS)) as audio:
+        with Audio(args.audio_path, audio_volume=args.volume, spectrogram_width=int(config.PIXEL_COUNT / 2 * config.CHANNELS_PER_PIXEL)) as audio:
             def sigint(signum, frame):
                 vis.stop()
                 signal.signal(signal.SIGINT, signal.SIG_DFL)
@@ -67,15 +67,15 @@ if __name__ == '__main__':
             while vis.running:
                 t = audio.elapsed_time
 
-                pixels = np.zeros((config.NUM_LEDS, config.NUM_LED_CHANNELS), dtype=np.float64)
+                pixels = np.zeros((config.PIXEL_COUNT, config.CHANNELS_PER_PIXEL), dtype=np.float64)
                 spec = audio.spectrogram(t)
 
-                low, mid, hi = tuple(split_spec(spec, config.NUM_LEDS // 2))
+                low, mid, hi = tuple(split_spec(spec, config.PIXEL_COUNT // 2))
                 # TODO: map to other hues besides RGB? (might need to be linearly independent)
                 pixels[:, 0] = np.concatenate((low[::-1], low))
                 pixels[:, 1] = np.concatenate((mid[::-1], mid))
                 pixels[:, 2] = np.concatenate((hi[::-1], hi))
-                # pixels[:, 0] = np.interp(np.linspace(0, 1, config.NUM_LEDS), np.linspace(0, 1, len(spec)), spec)
+                # pixels[:, 0] = np.interp(np.linspace(0, 1, config.PIXEL_COUNT), np.linspace(0, 1, len(spec)), spec)
 
                 # TODO: need to make less jumpy and increase contrast (as in make changes more pronounced)
 
@@ -84,7 +84,7 @@ if __name__ == '__main__':
 
                 if t > 0: gui.update_fps(frames / t)
                 gui.update_time(t)
-                gui.update_leds(pixels)
+                gui.update_pixels(pixels)
                 gui.update_spec(spec)
 
                 gui.app.processEvents()

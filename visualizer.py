@@ -18,14 +18,14 @@ class Visualizer(object):
             self._send_off()
 
     def _send_off(self):
-        self._send_pixels(np.zeros((config.NUM_LEDS, 3), dtype=np.uint8))
+        self._send_pixels(np.zeros((config.PIXEL_COUNT, 3), dtype=np.uint8))
 
     def send_pixels(self, pixels):
         if self.running:
-            assert pixels.shape in ((config.NUM_LEDS,), (config.NUM_LEDS, config.NUM_LED_CHANNELS))
+            assert pixels.shape in ((config.PIXEL_COUNT,), (config.PIXEL_COUNT, config.CHANNELS_PER_PIXEL))
             pixels = (np.clip(pixels, 0.0, 1.0) * 0xFF).astype(np.uint8)
             if pixels.ndim == 1:
-                pixels = np.tile(pixels, (config.NUM_LED_CHANNELS, 1)).T
+                pixels = np.tile(pixels, (config.CHANNELS_PER_PIXEL, 1)).T
 
             self._send_pixels(pixels)
 

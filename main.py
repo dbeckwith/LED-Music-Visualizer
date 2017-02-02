@@ -38,17 +38,17 @@ if __name__ == '__main__':
 
     import argparse
     parser = argparse.ArgumentParser(description='LED Music Visualizer by Daniel Beckwith')
-    parser.add_argument('-l', '--use_leds', action='store_true', help='Connect to external LED setup and send pixel values for visualization.')
+    parser.add_argument('-t', '--test_mode', action='store_true', help='Test mode. Don\'t connect to external LED setup.')
     parser.add_argument('-b', '--brightness', type=float_normal, default=1.0, help='LED brightness factor from 0 to 1.')
-    parser.add_argument('-m', '--music_path', type=file, required=False, help='Path to MP3 file to use for visualization. If not given, a test signal is used.')
+    parser.add_argument('-a', '--audio_path', type=file, required=False, help='Path to MP3 file to use for visualization. If not given, a test signal is used.')
     parser.add_argument('-v', '--volume', type=float_normal, default=0.5, help='Music volume from 0 to 1.')
     parser.add_argument('-d', '--show_debug_window', action='store_true', help='Show the debug window.')
     args = parser.parse_args()
 
     gui.setup()
 
-    with Visualizer(use_leds=args.use_leds, brightness=args.brightness) as vis:
-        with Audio(args.music_path, audio_volume=args.volume, spectrogram_width=int(config.NUM_LEDS / 2 * config.NUM_LED_CHANNELS)) as audio:
+    with Visualizer(use_leds=not args.test_mode, brightness=args.brightness) as vis:
+        with Audio(args.audio_path, audio_volume=args.volume, spectrogram_width=int(config.NUM_LEDS / 2 * config.NUM_LED_CHANNELS)) as audio:
             def sigint(signum, frame):
                 vis.stop()
                 signal.signal(signal.SIGINT, signal.SIG_DFL)
@@ -90,7 +90,7 @@ if __name__ == '__main__':
                 gui.app.processEvents()
 
                 # TODO: if fps too high, graph won't update
-                if not args.use_leds:
+                if args.test_mode:
                     time.sleep(0.01)
 
                 if not audio.running:

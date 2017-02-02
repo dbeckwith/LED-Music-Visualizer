@@ -74,6 +74,7 @@ class FadeCandy(object):
         if self.socket is not None:
             self.disconnect()
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        # TODO: better error messages
         self.socket.connect((self.host, self.port))
         self.socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, True)
 

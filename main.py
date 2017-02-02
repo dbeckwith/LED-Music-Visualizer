@@ -48,12 +48,12 @@ if __name__ == '__main__':
     gui.setup()
 
     with Visualizer(use_leds=args.use_leds, brightness=args.brightness) as vis:
-        with Audio(args.music_path, audio_volume=args.volume) as audio:
+        with Audio(args.music_path, audio_volume=args.volume, spectrogram_width=int(config.NUM_LEDS / 2 * config.NUM_LED_CHANNELS)) as audio:
             def sigint(signum, frame):
                 vis.stop()
                 signal.signal(signal.SIGINT, signal.SIG_DFL)
             signal.signal(signal.SIGINT, sigint)
-            gui.view.closeEvent = lambda *args: vis.stop()
+            gui.on_close = lambda: vis.stop()
 
             gui.start(args.show_debug_window)
 
@@ -69,14 +69,15 @@ if __name__ == '__main__':
 
                 pixels = np.zeros((config.NUM_LEDS, config.NUM_LED_CHANNELS), dtype=np.float64)
                 spec = audio.spectrogram(t)
-                # TODO: might be wrong about if low is lower part or higher part?? need to try with test signal
-                # I think I thought low indicies were high frequencies just because EVERYTHING is in the low indicies
-                # should do some tests (or use np.fft.fftfreq) to see what the actual frequencies are
+
                 low, mid, hi = tuple(split_spec(spec, config.NUM_LEDS // 2))
                 # TODO: map to other hues besides RGB? (might need to be linearly independent)
                 pixels[:, 0] = np.concatenate((low[::-1], low))
-                pixels[:, 1] = np.concatenate((hi[::-1], hi))
-                pixels[:, 2] = np.concatenate((mid, mid[::-1]))
+                pixels[:, 1] = np.concatenate((mid[::-1], mid))
+                pixels[:, 2] = np.concatenate((hi[::-1], hi))
+                # pixels[:, 0] = np.interp(np.linspace(0, 1, config.NUM_LEDS), np.linspace(0, 1, len(spec)), spec)
+
+                # TODO: need to make less jumpy and increase contrast (as in make changes more pronounced)
 
                 vis.send_pixels(pixels)
                 frames += 1

@@ -19,6 +19,8 @@ class GUI(object):
         view = pg.GraphicsView()
         view.resize(1000, 700)
         view.setWindowTitle('LED Music Visualizer')
+        view.closeEvent = self._close_event
+        self.on_close = None
 
         layout = pg.GraphicsLayout()
         view.setCentralItem(layout)
@@ -77,6 +79,11 @@ class GUI(object):
         self.debug_view = debug_view
         self.debug_layout = debug_layout
 
+    def _close_event(self, event):
+        if self.on_close is not None:
+            self.on_close()
+        event.accept()
+
     def update_leds(self, pixels):
         if not self.closed:
             for i, p in enumerate(self.channel_plots):
@@ -112,7 +119,6 @@ class GUI(object):
         self.view.close()
         self.debug_view.close()
         self.app.quit()
-        # pg.exit()
 
 class LEDViewer(QtGui.QGraphicsView):
     def __init__(self, parent=None):

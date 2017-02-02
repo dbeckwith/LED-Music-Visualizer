@@ -44,7 +44,7 @@ def smooth(alpha_decay=0.5, alpha_rise=0.5):
     return decorator
 
 class Audio(object):
-    def __init__(self, path=None, audio_volume=1.0):
+    def __init__(self, path, audio_volume, spectrogram_width):
         self.path = path
         self.audio_volume = audio_volume
 
@@ -69,7 +69,7 @@ class Audio(object):
         self.sample_count = self.samples.shape[0]
         print('Samples: {:,d}'.format(self.sample_count))
 
-        self._make_spectrogram()
+        self._spectrogram = self._make_spectrogram(spectrogram_width)
 
         util.timer('Creating audio stream')
         self.audio = pyaudio.PyAudio()
@@ -85,137 +85,111 @@ class Audio(object):
 
         self.running = False
 
-    def _make_spectrogram(self):
+    def _make_spectrogram(self, spectrogram_width):
         util.timer('Creating spectrogram')
 
-        frame_size = 256
-        overlap = frame_size // 2
-        hop_size = frame_size - overlap
-        frame_count = int(np.ceil(self.sample_count / hop_size)) + 1
+        frame_size = int(25 / 1000 * self.sample_rate)
+        frame_step = frame_size // 2
 
         samples = self.samples.copy()
-        # print(samples.shape)
         samples = np.mean(samples, axis=1)
-        # print(samples.shape)
-        sample_max = (1 << (self.sample_width * 8 - 1)) - 1
-        sample_min = ~sample_max
-        # self.samples = util.lerp(self.samples, sample_min, sample_max, 0, 1)
-        samples = samples / (sample_max + 1)
-        samples = np.concatenate((np.zeros(frame_size // 2), samples, np.zeros(frame_size // 2)))
-        # print(samples.shape)
 
-        # frames = np.empty((frame_count, frame_size), dtype=samples.dtype)
-        # print(frames.shape)
-        # for frame, sample_idx in enumerate(range(self.sample_count, hop_size)):
-        #     try:
-        #         frames[frame] = samples[sample_idx : sample_idx + frame_size]
-        #     except:
-        #         print(frame, sample_idx, sample_idx + frame_size)
-        #         exit()
-        # print(frame_count, frame_size, (samples.strides[0] * hop_size, samples.strides[0]))
+        frame_count = int(np.ceil(len(samples) / frame_step))
 
-        # TODO: breaks on test signal, probably some samples lengths cause problems, should custom implement
-        frames = np.lib.stride_tricks.as_strided(samples, shape=(frame_count, frame_size), strides=(samples.strides[0] * hop_size, samples.strides[0]), writeable=False).copy()
+        # pad samples to fit last frame
+        pad_samples = (frame_count - 1) * frame_step + frame_size - len(samples)
+        if pad_samples:
+            samples = np.concatenate((samples, np.zeros(pad_samples)))
+
+        frames = np.empty((frame_count, frame_size), dtype=samples.dtype)
+        for frame_idx in range(frame_count):
+            sample_idx = frame_idx * frame_step
+            frames[frame_idx] = samples[sample_idx : sample_idx + frame_size]
 
         window = np.hamming(frame_size)
         frames *= window
-        spec = np.abs(np.fft.rfft(frames, n=frame_size * 2 - 1))
 
-        time_bins, freq_bins = spec.shape
-        # TODO: replace all this scaling stuff with mel (http://practicalcryptography.com/miscellaneous/machine-learning/guide-mel-frequency-cepstral-coefficients-mfccs/)
-        freq_scale = np.linspace(0, 1, freq_bins, endpoint=False) ** 20
-        # print(freq_scale)
-        freq_scale *= freq_bins - 1
-        gui.debug_layout.addPlot(
-            row=0,
-            col=0,
-            title='Frequency Scale by Frequency',
-            labels={'left': 'New Frequency', 'bottom': 'Old Frequency'},
-            y=freq_scale
-        )
-        freq_scale = np.unique(np.round(freq_scale).astype(np.int_))
-        # print(freq_scale)
-        new_freq_bins = freq_scale.shape[0]
+        dft_size = 1024
+        dft = np.fft.rfft(frames, n=dft_size)
+        power_spectrum = np.square(np.abs(dft)) / frame_size
+        spectrum_freqs = np.fft.rfftfreq(dft_size, d=1 / self.sample_rate)
 
-        scaled_spec = np.zeros((time_bins, new_freq_bins), dtype=spec.dtype)
-        for i in range(new_freq_bins):
-            if i == new_freq_bins - 1:
-                scaled_spec[:, i] = np.mean(spec[:, freq_scale[i]:], axis=1)
-            else:
-                scaled_spec[:, i] = np.mean(spec[:, freq_scale[i]:freq_scale[i+1]], axis=1)
-        spec = scaled_spec
+        power_spectrum = self._mel_filter(power_spectrum, spectrum_freqs, spectrogram_width)
+        # power_spectrum = np.log(power_spectrum+1)
 
-        spec = util.lerp(spec, np.percentile(spec, 5), np.percentile(spec, 95), 0, 1)
-        np.clip(spec, 0, 1, out=spec)
+        print(np.min(power_spectrum), np.max(power_spectrum))
+        power_spectrum = np.log(power_spectrum + 1)
+        power_spectrum /= np.max(power_spectrum)
 
-        power_scale_min = 0.1
-        power_scale_max = 2
-        power_scale_power = 3
-        power_scale = util.lerp(np.linspace(0, 1, spec.shape[1]) ** power_scale_power, 0, 1, power_scale_min, power_scale_max)
-        gui.debug_layout.addPlot(
-            row=0,
-            col=1,
-            title='Power Scale by Frequency',
-            labels={'left': 'Power Factor', 'bottom': 'Frequency'},
-            y=power_scale
-        )
-        spec *= power_scale
+        # import matplotlib.pyplot as plt
+        # plt.imshow(power_spectrum[10000:11000].T, cmap='gray')
+        # plt.show()
 
-        def power_map(x):
-            return x ** (1 / 2)
-        debug_power_vals = np.linspace(0, 1, 1000)
-        gui.debug_layout.addPlot(
-            row=1,
-            col=0,
-            title='Power Scale by Power',
-            labels={'left': 'Power Factor', 'bottom': 'Power'},
-            x=debug_power_vals,
-            y=power_map(debug_power_vals)
-        )
-        spec = power_map(spec)
+        # exit()
 
-        # hist_vals, hist_bins = np.histogram(spec)
-        # gui.debug_layout.addPlot(
-        #     row=2,
-        #     col=0,
-        #     colspan=2,
-        #     title='Spectrogram Histogram',
-        #     labels={'left': 'Spectrogram Samples', 'bottom': 'Power'},
-        #     x=hist_bins[:-1],
-        #     y=hist_vals
-        # )
-
-        util.gaussian_filter1d(spec, sigma=1, axis=0, output=spec) # blur time axis
-        # util.gaussian_filter1d(spec, sigma=0.2, axis=1, output=spec) # blur freq axis
-
-        gui.debug_layout.addPlot(
-            row=1,
-            col=1,
-            title='Average Power by Frequency',
-            labels={'left': 'Power', 'bottom': 'Frequency'},
-            y=np.mean(spec, axis=0)
-        )
-        gui.debug_layout.addPlot(
-            row=2,
-            col=0,
-            colspan=2,
-            title='Average Power by Time',
-            labels={'left': 'Power', 'bottom': 'Time'},
-            x=np.linspace(0, self.sample_count / self.sample_rate, spec.shape[0]),
-            y=np.mean(spec, axis=1)
-        )
         gui.debug_layout.addViewBox(
-            row=3,
-            col=0,
-            colspan=2
+            row=1,
+            col=0
         ).addItem(pg.ImageItem(
-            image=spec
+            image=power_spectrum
         ))
 
-        self._spectrogram = spec
-        # from matplotlib import pyplot as plt
-        # plt.imshow(self._spectrogram[:1000], cmap='gray', vmin=0.0, vmax=1.0)
+        return power_spectrum
+
+    def _mel_filter(self, power_spectrum, spectrum_freqs, num_filters):
+        def freq_to_mel(f): return 1125 * np.log(1 + f / 700)
+        def mel_to_freq(m): return 700 * (np.exp(m / 1125) - 1)
+
+        print(power_spectrum.shape)
+
+        spec_size = power_spectrum.shape[1]
+
+        min_freq = 20
+        # TODO: max freq should be some upper limit, or Nyquist freq?
+        max_freq = 8000#self.sample_rate // 2
+
+        min_freq = freq_to_mel(min_freq)
+        max_freq = freq_to_mel(max_freq)
+
+        filter_freqs = np.linspace(min_freq, max_freq, num_filters + 2)
+        filter_freqs = mel_to_freq(filter_freqs)
+        # print(filter_freqs)
+        # print(spectrum_freqs)
+        # TODO: this rebinning with the filters could be more accurate?
+        # this round really impacts lower frequency bins
+        filter_freqs = np.round(np.interp(filter_freqs, spectrum_freqs, np.arange(spec_size))).astype(np.int_)
+        # print(filter_freqs)
+
+        filterbanks = np.zeros((spec_size, num_filters), dtype=power_spectrum.dtype)
+        filterbank_plot = gui.debug_layout.addPlot(
+            row=0,
+            col=0,
+            title='Mel Filterbanks',
+            labels={'left': 'Coefficient', 'bottom': 'Frequency'}
+        )
+        # import matplotlib.pyplot as plt
+        for i in range(num_filters):
+            filter_min = filter_freqs[i]
+            filter_mid = filter_freqs[i + 1]
+            filter_max = filter_freqs[i + 2]
+            filterbanks[filter_min : filter_mid, i] = np.linspace(0, 1, filter_mid - filter_min)
+            filterbanks[filter_mid - 1 : filter_max, i] = np.linspace(1, 0, filter_max - filter_mid + 1)
+            filterbanks[:, i] /= ((filter_max - filter_min) / 2)
+            # if i < 5:
+            #     print(filter_min, filter_mid, filter_max)
+            #     print(filterbanks[:, i])
+            filterbank_plot.plot(y=filterbanks[:, i])
+            # plt.plot(filterbanks[:, i])
         # plt.show()
+
+        # print(power_spectrum.shape)
+        # print(filterbanks.shape)
+
+        power_spectrum_filtered = np.dot(power_spectrum, filterbanks)
+
+        # print(power_spectrum_filtered.shape)
+
+        return power_spectrum_filtered
 
     @smooth(alpha_decay=0.2, alpha_rise=0.99)
     def spectrogram(self, t):

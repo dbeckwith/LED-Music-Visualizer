@@ -4,27 +4,14 @@
 import os
 import time
 import signal
-import numpy as np
 
 import config
 import util
-from visualizer import Visualizer
+from display import Display
 from audio import Audio
+from animation import Animation
 from gui import gui
 
-
-def split_spec(spec, n):
-    ranges = np.linspace(0, spec.shape[0], config.CHANNELS_PER_PIXEL + 1, dtype=np.int_)
-    for i in range(config.CHANNELS_PER_PIXEL):
-        spec_from = ranges[i]
-        spec_to = ranges[i + 1]
-        spec_range = spec_to - spec_from
-        channel_vals = np.interp(np.linspace(0, 1, n), np.linspace(0, 1, spec_to - spec_from), spec[spec_from:spec_to])
-        yield channel_vals
-
-
-TAIL_LEN = 0.5
-FPS_PRINT_INTERVAL = 5.0
 
 if __name__ == '__main__':
     def file(path):
@@ -50,54 +37,48 @@ if __name__ == '__main__':
 
     gui.setup()
 
-    with Visualizer(use_leds=not args.test_mode, brightness=args.brightness) as vis:
-        with Audio(args.audio_path, audio_volume=args.volume, spectrogram_width=int(config.PIXEL_COUNT / 2 * config.CHANNELS_PER_PIXEL)) as audio:
-            def sigint(signum, frame):
-                vis.stop()
-                signal.signal(signal.SIGINT, signal.SIG_DFL)
-            signal.signal(signal.SIGINT, sigint)
-            gui.on_close = lambda: vis.stop()
+    display = Display(use_leds=not args.test_mode, brightness=args.brightness)
+    audio = Audio(args.audio_path, audio_volume=args.volume)
+    animation = Animation(audio.samples, audio.sample_rate)
 
-            gui.start(args.show_debug_window)
+    def sigint(signum, frame):
+        display.stop()
+        signal.signal(signal.SIGINT, signal.SIG_DFL)
+    signal.signal(signal.SIGINT, sigint)
+    gui.on_close = lambda: display.stop()
 
-            vis.start()
-            audio.start()
+    gui.start(args.show_debug_window)
 
-            frames = 0
+    display.start()
+    audio.start()
 
-            util.timer('Running visualization')
+    frames = 0
 
-            while vis.running:
-                t = audio.elapsed_time
+    util.timer('Running visualization')
 
-                pixels = np.zeros((config.PIXEL_COUNT, config.CHANNELS_PER_PIXEL), dtype=np.float64)
-                spec = audio.spectrogram(t)
+    while display.running:
+        t = audio.elapsed_time
 
-                low, mid, hi = tuple(split_spec(spec, config.PIXEL_COUNT // 2))
-                # TODO: map to other hues besides RGB? (might need to be linearly independent)
-                pixels[:, 0] = np.concatenate((low[::-1], low))
-                pixels[:, 1] = np.concatenate((mid[::-1], mid))
-                pixels[:, 2] = np.concatenate((hi[::-1], hi))
-                # pixels[:, 0] = np.interp(np.linspace(0, 1, config.PIXEL_COUNT), np.linspace(0, 1, len(spec)), spec)
+        pixels = animation.get_frame(t)
 
-                # TODO: need to make less jumpy and increase contrast (as in make changes more pronounced)
+        display.send_pixels(pixels)
+        frames += 1
 
-                vis.send_pixels(pixels)
-                frames += 1
+        if t > 0: gui.update_fps(frames / t)
+        gui.update_time(t)
+        gui.update_pixels(pixels)
+        gui.update_spec(animation.get_spec_frame(t))
 
-                if t > 0: gui.update_fps(frames / t)
-                gui.update_time(t)
-                gui.update_pixels(pixels)
-                gui.update_spec(spec)
+        gui.app.processEvents()
 
-                gui.app.processEvents()
+        # TODO: if fps too high, graph won't update
+        if args.test_mode:
+            time.sleep(0.01)
 
-                # TODO: if fps too high, graph won't update
-                if args.test_mode:
-                    time.sleep(0.01)
+        if not audio.running:
+            display.stop()
 
-                if not audio.running:
-                    vis.stop()
+    audio.stop()
                 
     gui.stop()
     util.timer()

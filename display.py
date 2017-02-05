@@ -9,7 +9,7 @@ import config
 import util
 
 
-class Visualizer(object):
+class Display(object):
     def __init__(self, use_leds=True, brightness=1.0):
         self.use_leds = use_leds
         self.brightness = np.clip(brightness, 0.0, 1.0)
@@ -38,13 +38,6 @@ class Visualizer(object):
     def start(self):
         util.timer('Starting visualizer')
         self.running = True
-
-    def stop(self):
-        if self.running:
-            util.timer('Stopping visualizer')
-            self.running = False
-
-    def __enter__(self, *args):
         if self.use_leds:
             util.timer('Connecting to LEDs')
             self.fadecandy = FadeCandy()
@@ -56,13 +49,14 @@ class Visualizer(object):
                 b=self.brightness * 0.7
             )
 
-        return self
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        if self.use_leds:
-            util.timer('Disconnecting from LEDs')
-            self._send_off()
-            self.fadecandy.disconnect()
+    def stop(self):
+        if self.running:
+            util.timer('Stopping visualizer')
+            self.running = False
+            if self.use_leds:
+                util.timer('Disconnecting from LEDs')
+                self._send_off()
+                self.fadecandy.disconnect()
 
 # http://openpixelcontrol.org/
 class FadeCandy(object):

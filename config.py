@@ -1,6 +1,10 @@
 # -*- coding: utf-8 -*-
 
-PIXEL_COUNT = 60
+import numpy as np
+
+
+DISPLAY_SHAPE = (60,)
+PIXEL_COUNT = np.prod(DISPLAY_SHAPE)
 CHANNELS_PER_PIXEL = 3
 
 FADECANDY_HOST = '127.0.0.1'

@@ -92,7 +92,7 @@ def _frame_interp(frames, frame_rate, t):
         return frames[int(i1)] * (1 - blend) + frames[int(i2)] * blend
 
 def _make_spectrogram(samples, sample_rate, spectrogram_width):
-    frame_size = int(25 / 1000 * sample_rate)
+    frame_size = int(20e-3 * sample_rate)
     frame_step = frame_size // 2
 
     samples = samples.copy()
@@ -110,7 +110,7 @@ def _make_spectrogram(samples, sample_rate, spectrogram_width):
         sample_idx = frame_idx * frame_step
         frames[frame_idx] = samples[sample_idx : sample_idx + frame_size]
 
-    window = np.hamming(frame_size)
+    window = np.hanning(frame_size)
     frames *= window
 
     dft_size = 1024

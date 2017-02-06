@@ -48,26 +48,32 @@ class Animation(object):
         self.sample_count = audio_samples.shape[0]
 
         util.timer('Creating animation')
-        self.spec = _make_spectrogram(audio_samples, sample_rate, int(config.PIXEL_COUNT / 2 * config.CHANNELS_PER_PIXEL))
-        low, mid, hi = tuple(self._split_spec(self.spec, config.PIXEL_COUNT // 2))
-        # TODO: map to other hues besides RGB? (might need to be linearly independent)
+
+        COLOR = False
+
+        self.spec = _make_spectrogram(audio_samples, sample_rate, int(config.PIXEL_COUNT / 2 * config.CHANNELS_PER_PIXEL) if COLOR else int(config.PIXEL_COUNT / 2))
         self.frames = np.zeros((self.spec.shape[0], config.PIXEL_COUNT, config.CHANNELS_PER_PIXEL), dtype=np.float64)
-        self.frames[:, :, 0] = np.concatenate((low[:, ::-1], low), axis=1)
-        self.frames[:, :, 1] = np.concatenate((mid[:, ::-1], mid), axis=1)
-        self.frames[:, :, 2] = np.concatenate((hi[:, ::-1], hi), axis=1)
+
+        if COLOR:
+            def split_spec(spec, n):
+                ranges = np.linspace(0, spec.shape[1], config.CHANNELS_PER_PIXEL + 1, dtype=np.int_)
+                for i in range(config.CHANNELS_PER_PIXEL):
+                    spec_from = ranges[i]
+                    spec_to = ranges[i + 1]
+                    spec_range = spec_to - spec_from
+                    channel_vals = np.empty((spec.shape[0], n), dtype=spec.dtype)
+                    for frame in range(spec.shape[0]):
+                        channel_vals[frame] = np.interp(np.linspace(0, 1, n), np.linspace(0, 1, spec_to - spec_from), spec[frame, spec_from:spec_to])
+                    yield channel_vals
+            low, mid, hi = tuple(split_spec(self.spec, config.PIXEL_COUNT // 2))
+            # TODO: map to other hues besides RGB? (might need to be linearly independent)
+            self.frames[:, :, 0] = np.concatenate((low[:, ::-1], low), axis=1)
+            self.frames[:, :, 1] = np.concatenate((mid[:, ::-1], mid), axis=1)
+            self.frames[:, :, 2] = np.concatenate((hi[:, ::-1], hi), axis=1)
+        else:
+            self.frames = np.repeat(np.expand_dims(np.concatenate((self.spec[:, ::-1], self.spec), axis=1), -1), config.CHANNELS_PER_PIXEL, -1)
 
         # TODO: maybe could do some kind of peak analysis to get specific instruments?
-
-    def _split_spec(self, spec, n):
-        ranges = np.linspace(0, spec.shape[1], config.CHANNELS_PER_PIXEL + 1, dtype=np.int_)
-        for i in range(config.CHANNELS_PER_PIXEL):
-            spec_from = ranges[i]
-            spec_to = ranges[i + 1]
-            spec_range = spec_to - spec_from
-            channel_vals = np.empty((spec.shape[0], n), dtype=spec.dtype)
-            for frame in range(spec.shape[0]):
-                channel_vals[frame] = np.interp(np.linspace(0, 1, n), np.linspace(0, 1, spec_to - spec_from), spec[frame, spec_from:spec_to])
-            yield channel_vals
 
     @smooth(alpha_decay=0.2, alpha_rise=0.99)
     def get_frame(self, t):

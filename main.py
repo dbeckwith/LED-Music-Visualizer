@@ -37,31 +37,31 @@ if __name__ == '__main__':
 
     gui.setup()
 
-    display = Display(use_leds=not args.test_mode, brightness=args.brightness)
+    display = Display(brightness=args.brightness) if not args.test_mode else None
     audio = Audio(args.audio_path, audio_volume=args.volume)
     animation = Animation(audio.samples, audio.sample_rate)
 
     def sigint(signum, frame):
-        display.stop()
+        audio.stop()
         signal.signal(signal.SIGINT, signal.SIG_DFL)
     signal.signal(signal.SIGINT, sigint)
-    gui.on_close = lambda: display.stop()
+    gui.on_close = lambda: audio.stop()
 
     gui.start(args.show_debug_window)
 
-    display.start()
+    if display: display.start()
     audio.start()
 
     frames = 0
 
     util.timer('Running visualization')
 
-    while display.running:
+    while audio.running:
         t = audio.elapsed_time
 
         pixels = animation.get_frame(t)
 
-        display.send_pixels(pixels)
+        if display: display.send_pixels(pixels)
         frames += 1
 
         if t > 0: gui.update_fps(frames / t)
@@ -72,13 +72,13 @@ if __name__ == '__main__':
         gui.app.processEvents()
 
         # TODO: if fps too high, graph won't update
-        if args.test_mode:
+        if not display:
             time.sleep(0.01)
 
-        if not audio.running:
-            display.stop()
+        if display and not display.running:
+            audio.stop()
 
-    audio.stop()
+    if display: display.stop()
                 
     gui.stop()
     util.timer()

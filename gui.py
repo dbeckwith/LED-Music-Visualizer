@@ -36,24 +36,12 @@ class GUI(object):
         layout.layout.setRowStretchFactor(0, 1)
         layout.nextRow()
 
-        # TODO: make into bar graph https://stackoverflow.com/questions/36551044/how-to-plot-two-barh-in-one-axis-in-pyqtgraph
-        colors_plot = layout.addPlot(title='Pixel Colors')
-        colors_plot.hideButtons()
-        colors_plot.setMouseEnabled(x=False, y=False)
-        colors_plot.setYRange(0.0, 1.0, padding=0)
-        channel_plots = []
-        for c in range(3):
-            channel_plots.append(colors_plot.plot(pen=tuple(255 if i == c else 0 for i in range(3))))
-
-        layout.layout.setRowStretchFactor(1, 1)
-        layout.nextRow()
-
         pixel_viewer_proxy = QtGui.QGraphicsProxyWidget(layout)
         pixel_viewer = PixelViewer()
         pixel_viewer_proxy.setWidget(pixel_viewer)
         layout.addItem(pixel_viewer_proxy)
 
-        layout.layout.setRowStretchFactor(2, 0)
+        layout.layout.setRowStretchFactor(1, 1)
         layout.nextRow()
 
         labels_layout = pg.GraphicsLayout()
@@ -61,7 +49,7 @@ class GUI(object):
         time_label = labels_layout.addLabel('Elapsed Time: ?')
         layout.addItem(labels_layout)
 
-        layout.layout.setRowStretchFactor(3, 0)
+        layout.layout.setRowStretchFactor(2, 0)
 
         debug_view = pg.GraphicsView()
         debug_view.resize(800, 600)
@@ -73,7 +61,6 @@ class GUI(object):
         self.app = app
         self.view = view
         self.spec_plot_plot = spec_plot_plot
-        self.channel_plots = channel_plots
         self.pixel_viewer = pixel_viewer
         self.fps_label = fps_label
         self.time_label = time_label
@@ -88,9 +75,6 @@ class GUI(object):
 
     def update_pixels(self, pixels):
         if not self.closed:
-            for i, p in enumerate(self.channel_plots):
-                p.setData(y=pixels[:, i])
-
             self.pixel_viewer.set_colors(pixels)
 
     def update_spec(self, spec):
@@ -134,18 +118,21 @@ class PixelViewer(QtGui.QGraphicsView):
         size = 10
         spacing = 4
 
-        self.pixels = []
-        for i in range(config.PIXEL_COUNT):
-            pixel = scene.addEllipse(i * (size + spacing), 0.0, size, size)
-            pixel.setPen(QtGui.QPen(QtGui.QBrush(QtGui.QColor(127, 127, 127)), 1.0))
-            pixel.setBrush(QtGui.QBrush(QtGui.QColor(0, 0, 0)))
-            self.pixels.append(pixel)
+        self.pixels = np.empty(config.DISPLAY_SHAPE, dtype=np.object_)
+        for y in range(config.DISPLAY_SHAPE[1]):
+            for x in range(config.DISPLAY_SHAPE[0]):
+                pixel = scene.addEllipse(x * (size + spacing), y * (size + spacing), size, size)
+                pixel.setPen(QtGui.QPen(QtGui.QBrush(QtGui.QColor(127, 127, 127)), 1.0))
+                pixel.setBrush(QtGui.QBrush(QtGui.QColor(0, 0, 0)))
+                self.pixels[x, y] = pixel
 
         self.setScene(scene)
 
     def set_colors(self, colors):
+        expected_shape = self.pixels.shape + (config.CHANNELS_PER_PIXEL,)
+        assert colors.shape == expected_shape, 'colors shape ({}) does not match display shape ({})'.format(colors.shape, expected_shape)
         colors = (colors * 0xFF).astype(np.uint8)
-        for i, pixel in enumerate(self.pixels):
-            pixel.setBrush(QtGui.QBrush(QtGui.QColor(*colors[i])))
+        for coord, pixel in np.ndenumerate(self.pixels):
+            pixel.setBrush(QtGui.QBrush(QtGui.QColor(*colors[coord])))
 
 gui = GUI()

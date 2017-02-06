@@ -3,7 +3,7 @@
 import numpy as np
 
 
-DISPLAY_SHAPE = (60,)
+DISPLAY_SHAPE = (8, 8)
 PIXEL_COUNT = np.prod(DISPLAY_SHAPE)
 CHANNELS_PER_PIXEL = 3
 

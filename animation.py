@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import numpy as np
+from pyqtgraph.Qt import QtCore, QtGui
 import pyqtgraph as pg
 
 import config
@@ -46,42 +47,56 @@ class Animation(object):
     def __init__(self, audio_samples, sample_rate):
         self.sample_rate = sample_rate
         self.sample_count = audio_samples.shape[0]
+        self.duration = self.sample_count / self.sample_rate
 
-        util.timer('Creating animation')
+        util.timer('Creating spectrogram')
 
-        COLOR = False
+        self.spec = _make_spectrogram(audio_samples, sample_rate, 60)
+        self.frame_count = self.spec.shape[0]
+        self.frame_rate = self.frame_count / self.duration
+        self.prev_frame_t = 0
 
-        self.spec = _make_spectrogram(audio_samples, sample_rate, int(config.PIXEL_COUNT / 2 * config.CHANNELS_PER_PIXEL) if COLOR else int(config.PIXEL_COUNT / 2))
-        self.frames = np.zeros((self.spec.shape[0], config.PIXEL_COUNT, config.CHANNELS_PER_PIXEL), dtype=np.float64)
+        self.canvas = QtGui.QImage(*config.DISPLAY_SHAPE, QtGui.QImage.Format_RGB32)
 
-        if COLOR:
-            def split_spec(spec, n):
-                ranges = np.linspace(0, spec.shape[1], config.CHANNELS_PER_PIXEL + 1, dtype=np.int_)
-                for i in range(config.CHANNELS_PER_PIXEL):
-                    spec_from = ranges[i]
-                    spec_to = ranges[i + 1]
-                    spec_range = spec_to - spec_from
-                    channel_vals = np.empty((spec.shape[0], n), dtype=spec.dtype)
-                    for frame in range(spec.shape[0]):
-                        channel_vals[frame] = np.interp(np.linspace(0, 1, n), np.linspace(0, 1, spec_to - spec_from), spec[frame, spec_from:spec_to])
-                    yield channel_vals
-            low, mid, hi = tuple(split_spec(self.spec, config.PIXEL_COUNT // 2))
-            # TODO: map to other hues besides RGB? (might need to be linearly independent)
-            self.frames[:, :, 0] = np.concatenate((low[:, ::-1], low), axis=1)
-            self.frames[:, :, 1] = np.concatenate((mid[:, ::-1], mid), axis=1)
-            self.frames[:, :, 2] = np.concatenate((hi[:, ::-1], hi), axis=1)
-        else:
-            self.frames = np.repeat(np.expand_dims(np.concatenate((self.spec[:, ::-1], self.spec), axis=1), -1), config.CHANNELS_PER_PIXEL, -1)
+    def get_frame(self, t):
+        dt = t - self.prev_frame_t
+        self.prev_frame_t = t
 
         # TODO: maybe could do some kind of peak analysis to get specific instruments?
 
-    @smooth(alpha_decay=0.2, alpha_rise=0.99)
-    def get_frame(self, t):
-        return _frame_interp(self.frames, self.sample_rate * self.frames.shape[0] / self.sample_count, t)
+        self.canvas.fill(0xFF000000)
 
-    @smooth(alpha_decay=0.2, alpha_rise=0.99)
+        painter = QtGui.QPainter(self.canvas)
+        painter.setRenderHint(QtGui.QPainter.Antialiasing)
+        painter.translate(config.DISPLAY_SHAPE[0] / 2, config.DISPLAY_SHAPE[1] / 2)
+        painter.scale(config.DISPLAY_SHAPE[0] / 2, config.DISPLAY_SHAPE[1] / 2)
+
+        pen = QtGui.QPen(QtGui.QBrush(QtGui.QColor(0, 0, 0)), 0.5, QtCore.Qt.SolidLine, QtCore.Qt.FlatCap, QtCore.Qt.BevelJoin)
+        pen.setCosmetic(True)
+        painter.setPen(pen)
+        # painter.setBrush(QtGui.QBrush(QtGui.QColor(200, 0, 0)))
+        for offset in range(3):
+            angle = util.lerp(t + offset / 3, 0, 2, 0, np.pi * 2)
+            x = np.cos(angle)
+            y = np.sin(angle)
+            c = [0, 0, 0]
+            c[offset] = 200
+            pen = painter.pen()
+            brush = pen.brush()
+            brush.setColor(QtGui.QColor(*c))
+            pen.setBrush(brush)
+            painter.setPen(pen)
+            painter.drawLine(QtCore.QPointF(x, y), QtCore.QPointF(-x, -y))
+
+        painter.end()
+
+        ptr = self.canvas.constBits()
+        ptr.setsize(self.canvas.byteCount())
+        return np.array(ptr).reshape(config.DISPLAY_SHAPE[1], config.DISPLAY_SHAPE[0], 4)[:, :, -2:-5:-1]
+
+    # @smooth(alpha_decay=0.2, alpha_rise=0.99)
     def get_spec_frame(self, t):
-        return _frame_interp(self.spec, self.sample_rate * self.spec.shape[0] / self.sample_count, t)
+        return _frame_interp(self.spec, self.frame_rate, t)
 
 def _frame_interp(frames, frame_rate, t):
     i = t * frame_rate

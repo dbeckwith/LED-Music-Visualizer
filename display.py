@@ -23,7 +23,7 @@ class Display(object):
 
     def send_pixels(self, pixels):
         if self.running:
-            assert pixels.shape in ((config.PIXEL_COUNT,), (config.PIXEL_COUNT, config.CHANNELS_PER_PIXEL))
+            assert pixels.shape == config.DISPLAY_SHAPE + (config.CHANNELS_PER_PIXEL,)
             pixels = (np.clip(pixels, 0.0, 1.0) * 0xFF).astype(np.uint8)
 
             self._send_pixels(pixels)
@@ -83,8 +83,14 @@ class FadeCandy(object):
                 header = struct.pack('>BBH', i + 1, 0x00, len(b))
                 self.socket.send(header + b)
         else:
-            # TODO: implement sending Fadecandy 2D data
-            raise NotImplementedError('Fadecandy 2D displays not yet implemented')
+            channel = 0
+            dimmax = int(np.sqrt(FadeCandy.MAX_LEDS_PER_CHANNEL))
+            for y in range(pixels.shape[1] // dimmax):
+                for x in range(pixels.shape[0] // dimmax):
+                    b = bytes(pixels[x : min(x + dimmax, pixels.shape[0]), y : min(y + dimmax, pixels.shape[1]), :].transpose(1, 0, 2))
+                    header = struct.pack('>BBH', channel, 0x00, len(b))
+                    self.socket.send(header + b)
+                    channel += 1
 
     def disconnect(self):
         if self.socket is not None:

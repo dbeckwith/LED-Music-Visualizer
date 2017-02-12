@@ -119,19 +119,17 @@ class PixelViewer(QtGui.QGraphicsView):
         spacing = 4
 
         self.pixels = np.empty(config.DISPLAY_SHAPE, dtype=np.object_)
-        for y in range(config.DISPLAY_SHAPE[1]):
-            for x in range(config.DISPLAY_SHAPE[0]):
-                pixel = scene.addEllipse(x * (size + spacing), y * (size + spacing), size, size)
-                pixel.setPen(QtGui.QPen(QtGui.QBrush(QtGui.QColor(127, 127, 127)), 1.0))
-                pixel.setBrush(QtGui.QBrush(QtGui.QColor(0, 0, 0)))
-                self.pixels[x, y] = pixel
+        for x, y in np.ndindex(self.pixels.shape):
+            pixel = scene.addEllipse(x * (size + spacing), y * (size + spacing), size, size)
+            pixel.setPen(QtGui.QPen(QtGui.QBrush(QtGui.QColor(127, 127, 127)), 1.0))
+            pixel.setBrush(QtGui.QBrush(QtGui.QColor(0, 0, 0)))
+            self.pixels[x, y] = pixel
 
         self.setScene(scene)
 
     def set_colors(self, colors):
         expected_shape = self.pixels.shape + (config.CHANNELS_PER_PIXEL,)
         assert colors.shape == expected_shape, 'colors shape ({}) does not match display shape ({})'.format(colors.shape, expected_shape)
-        colors = (colors * 0xFF).astype(np.uint8)
         for coord, pixel in np.ndenumerate(self.pixels):
             pixel.setBrush(QtGui.QBrush(QtGui.QColor(*colors[coord])))
 

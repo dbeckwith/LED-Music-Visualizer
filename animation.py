@@ -71,7 +71,7 @@ class Animation(object):
         painter.translate(config.DISPLAY_SHAPE[0] / 2, config.DISPLAY_SHAPE[1] / 2)
         painter.scale(config.DISPLAY_SHAPE[0] / 2, config.DISPLAY_SHAPE[1] / 2)
 
-        pen = QtGui.QPen(QtGui.QBrush(QtGui.QColor(0, 0, 0)), 0.5, QtCore.Qt.SolidLine, QtCore.Qt.FlatCap, QtCore.Qt.BevelJoin)
+        pen = QtGui.QPen(QtGui.QBrush(QtCore.Qt.black), 1, QtCore.Qt.SolidLine, QtCore.Qt.FlatCap, QtCore.Qt.BevelJoin)
         pen.setCosmetic(True)
         painter.setPen(pen)
         # painter.setBrush(QtGui.QBrush(QtGui.QColor(200, 0, 0)))
@@ -79,20 +79,23 @@ class Animation(object):
             angle = util.lerp(t + offset / 3, 0, 2, 0, np.pi * 2)
             x = np.cos(angle)
             y = np.sin(angle)
-            c = [0, 0, 0]
-            c[offset] = 200
             pen = painter.pen()
             brush = pen.brush()
-            brush.setColor(QtGui.QColor(*c))
+            brush.setColor(QtGui.QColor.fromHsvF(util.lerp(offset, 0, 3, 0, 1), 1, 1))
             pen.setBrush(brush)
             painter.setPen(pen)
             painter.drawLine(QtCore.QPointF(x, y), QtCore.QPointF(-x, -y))
 
         painter.end()
 
+        self.canvas.setPixel(0, 0, 0xFFFFFFFF)
+        self.canvas.setPixel(config.DISPLAY_SHAPE[0] - 1, 0, 0xFFFF0000)
+        self.canvas.setPixel(0, config.DISPLAY_SHAPE[1] - 1, 0xFF00FF00)
+        self.canvas.setPixel(config.DISPLAY_SHAPE[0] - 1, config.DISPLAY_SHAPE[1] - 1, 0xFF0000FF)
+
         ptr = self.canvas.constBits()
         ptr.setsize(self.canvas.byteCount())
-        return np.array(ptr).reshape(config.DISPLAY_SHAPE[1], config.DISPLAY_SHAPE[0], 4)[:, :, -2:-5:-1]
+        return np.array(ptr).reshape(config.DISPLAY_SHAPE[1], config.DISPLAY_SHAPE[0], 4)[:, :, -2:-5:-1].transpose(1, 0, 2)
 
     # @smooth(alpha_decay=0.2, alpha_rise=0.99)
     def get_spec_frame(self, t):

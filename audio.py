@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import time
+
 import pydub
 import pyaudio
 import numpy as np
@@ -35,6 +36,7 @@ class Audio(object):
 
         self.samples = np.reshape(self.samples, (-1, self.channels))
         self.sample_count = self.samples.shape[0]
+        self.duration = self.sample_count / self.sample_rate
         print('Samples: {:,d}'.format(self.sample_count))
 
         util.timer('Creating audio stream')
@@ -53,12 +55,11 @@ class Audio(object):
 
     @property
     def elapsed_time(self):
-        return time.time() - self.start_time
+        return util.lerp(self.stream_pos, 0, self.sample_count, 0, self.duration)
 
     def start(self):
         util.timer('Starting audio')
         self.running = True
-        self.start_time = time.time()
         self.stream.start_stream()
 
     def stop(self):
@@ -69,8 +70,19 @@ class Audio(object):
             self.stream.close()
             self.audio.terminate()
 
+    def pause(self):
+        if self.running:
+            self.stream.stop_stream()
+
+    def unpause(self):
+        if self.running:
+            self.stream.start_stream()
+
+    def is_paused(self):
+        return self.running and self.stream.is_stopped()
+
     def _update_stream(self, in_data, frame_count, time_info, status_flags):
-        end = self.stream_pos+frame_count
+        end = self.stream_pos + frame_count
         if end >= self.samples.shape[0]:
             end = self.samples.shape[0]
             self.stop()

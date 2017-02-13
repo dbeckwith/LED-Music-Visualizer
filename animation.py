@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
 
-import os.path
-
 import numpy as np
 from pyqtgraph.Qt import QtCore, QtGui
 import pyqtgraph as pg
@@ -57,12 +55,10 @@ class Animation(object):
 
         util.timer('Creating spectrogram')
 
-        # TODO: need to make spectrogram much more detailed, also maybe no Mel filter
         self.spec, self.spec_freqs = _make_spectrogram(audio_samples, sample_rate, 200)
         self.frame_count = self.spec.shape[0]
         self.frame_rate = self.frame_count / self.duration
         self.prev_frame_t = 0
-        self.spec_frame_t = None
 
         self.canvas = QtGui.QImage(*config.DISPLAY_SHAPE, QtGui.QImage.Format_RGB32)
 
@@ -74,7 +70,9 @@ class Animation(object):
         def spec_freq(freq):
             return np.interp(freq, self.spec_freqs, spec)
 
-        # TODO: maybe could do some kind of peak analysis to get specific instruments?
+        # TODO: maybe could do some kind of image processing to automatically identify notes?
+        # TODO: capture percussion or at least beat
+        # could modulate rotation on beat
 
         self.canvas.fill(0xFF000000)
 
@@ -83,14 +81,14 @@ class Animation(object):
         painter.translate(config.DISPLAY_SHAPE[0] / 2, config.DISPLAY_SHAPE[1] / 2)
         # painter.scale(config.DISPLAY_SHAPE[0] / 2, config.DISPLAY_SHAPE[1] / 2)
 
-        def blip(center, strength, hue):
+        def blip(center, strength, hue, saturation, lightness):
             radius = util.lerp(strength, 0, 1, 0.5, 1.75, clip=True)
             brightness = util.lerp(strength, 0, 1, 0.3, 1.0, clip=True)
 
             grad = QtGui.QRadialGradient(0.5, 0.5, 0.5)
             grad.setCoordinateMode(QtGui.QGradient.ObjectBoundingMode)
-            grad.setColorAt(0.0, QtGui.QColor.fromHsvF(hue, 0.40, 1, brightness))
-            grad.setColorAt(0.2, QtGui.QColor.fromHsvF(hue, 0.82, 1, brightness * 0.8))
+            grad.setColorAt(0.0, QtGui.QColor.fromHsvF(hue, saturation * 0.3, lightness, brightness))
+            grad.setColorAt(0.2, QtGui.QColor.fromHsvF(hue, saturation, lightness, brightness * 0.8))
             grad.setColorAt(1.0, QtCore.Qt.transparent)
             painter.setBrush(QtGui.QBrush(grad))
             painter.setPen(QtCore.Qt.NoPen)
@@ -103,28 +101,34 @@ class Animation(object):
 
         painter.rotate(util.lerp(t, 0, 20, 0, 360))
 
-        blip(
+        positions = [
             (-2.5, -1.5),
-            util.lerp(spec_freq(650), 0.6, 0.75, 0, 1),
-            232/360)
-        blip(
             (1.5, -2.5),
-            util.lerp(spec_freq(1050), 0.5, 0.6, 0, 1),
-            232/360)
-        blip(
             (2.5, 1.5),
-            util.lerp(spec_freq(1175), 0.4, 0.5, 0, 1),
-            232/360)
-        blip(
             (-1.5, 2.5),
-            util.lerp(spec_freq(1550), 0.45, 0.55, 0, 1),
-            232/360)
+        ]
+        notes = [
+            (355.7, 0.65, 0.80),
+            (671.0, 0.55, 0.78),
+            # (805.1, 0.55, 0.84),
+            (1048, 0.45, 0.67),
+            (1183, 0.41, 0.59),
+        ]
+        colors = [
+            (146/360, 0.87, 1.00),
+            (204/360, 0.91, 1.00),
+            (218/360, 0.86, 0.91),
+            (231/360, 0.86, 1.00),
+        ]
 
-        if t >= 22:
+        for position, note, color in zip(positions, notes, colors):
+            blip(position, util.lerp(spec_freq(note[0]), note[1], note[2], 0, 1), *color)
+
+        if t >= 22.13:
             blip(
                 (0, 0),
-                util.lerp(spec_freq(300), 0.6, 0.8, 0, 1),
-                350/360)
+                util.lerp(spec_freq(159.7), 0.71, 0.76, 0, 1),
+                350/360, 0.85, 1)
 
         painter.end()
 
@@ -134,13 +138,8 @@ class Animation(object):
         pixels = np.array(ptr).reshape(config.DISPLAY_SHAPE[1], config.DISPLAY_SHAPE[0], 4)[:, :, -2:-5:-1].transpose(1, 0, 2)
         return pixels
 
-    @smooth(alpha_decay=0.2, alpha_rise=0.99, key='anispec')
     def get_spec_frame(self, t):
-        if self.spec_frame_t == None or self.spec_frame_t != t:
-            self.spec_frame_t = t
-            return _frame_interp(self.spec, self.frame_rate, t)
-        else:
-            return _smoothing_filters['anispec'].value
+        return _frame_interp(self.spec, self.frame_rate, t)
 
 def _frame_interp(frames, frame_rate, t):
     i = t * frame_rate
@@ -186,41 +185,16 @@ def _make_spectrogram(samples, sample_rate, spectrogram_width):
     power_spectrum, spectrum_freqs = _mel_filter(power_spectrum, spectrum_freqs, spectrogram_width)
     # power_spectrum = np.log(power_spectrum+1)
 
-    print(np.min(power_spectrum), np.max(power_spectrum))
     power_spectrum = np.log(power_spectrum + 1)
     power_spectrum /= np.max(power_spectrum)
 
-    # import matplotlib.pyplot as plt
-    # plt.imshow(power_spectrum[10000:11000].T, cmap='gray')
-    # plt.show()
-
-    # exit()
-
-    img_plot = gui.debug_layout.addPlot(
-        row=1,
-        col=0
-    )
-
-    img_item = pg.ImageItem(
-        image=power_spectrum
-    )
-    img_plot.addItem(img_item)
-    # img_plot.addLine
-    # img_plot.getAxis('left').tickValues(spectrum_freqs[0], spectrum_freqs[-1], spectrum_freqs.shape[0])
-    # img_plot.getAxis('bottom').tickValues(0, self.duration, 1000)
-
-    spec_img = util.lerp(power_spectrum, 0, 1, 0, 0xFF, clip=True).astype(np.uint8)
-    spec_img = np.repeat(spec_img[:, :, np.newaxis], 4, 2)
-    spec_img = spec_img.transpose(1, 0, 2)
-    QtGui.QImage(spec_img.tobytes(), spec_img.shape[1], spec_img.shape[0], QtGui.QImage.Format_RGB32).save(os.path.join(os.path.dirname(__file__), 'spec.png'))
+    power_spectrum = util.gaussian_filter1d(power_spectrum, 2, axis=0)
 
     return power_spectrum, spectrum_freqs
 
 def _mel_filter(power_spectrum, spectrum_freqs, num_filters):
     def freq_to_mel(f): return 1125 * np.log(1 + f / 700)
     def mel_to_freq(m): return 700 * (np.exp(m / 1125) - 1)
-
-    print(power_spectrum.shape)
 
     spec_size = power_spectrum.shape[1]
 
@@ -233,11 +207,12 @@ def _mel_filter(power_spectrum, spectrum_freqs, num_filters):
 
     filter_freqs = np.linspace(min_freq, max_freq, num_filters + 2)
     filter_freqs = mel_to_freq(filter_freqs)
-    print(filter_freqs)
+    print('spectrum frequencies:')
     print(spectrum_freqs)
-    # TODO: this rebinning with the filters could be more accurate?
-    # this round really impacts lower frequency bins
+    print('filter frequencies:')
+    print(filter_freqs)
     filter_freq_idxs = np.interp(filter_freqs, spectrum_freqs, np.arange(spec_size))
+    print('filter frequency indicies:')
     print(filter_freq_idxs)
 
     filterbanks = np.zeros((spec_size, num_filters), dtype=power_spectrum.dtype)

@@ -47,41 +47,52 @@ if __name__ == '__main__':
     signal.signal(signal.SIGINT, sigint)
     gui.on_close = lambda: audio.stop()
 
+    gui.spec_viewer.set_spectrogram(animation.spec, animation.spec_freqs, animation.frame_rate)
+
     gui.start(args.show_debug_window)
 
     if display: display.start()
     audio.start()
 
-    frames = 0
+    frame_times = []
 
     util.timer('Running visualization')
 
-    while audio.running:
-        t = audio.elapsed_time
+    try:
+        while audio.running:
+            t = audio.elapsed_time
 
-        pixels = animation.get_frame(t)
+            frame_timer = time.time()
+            frame_times.append(frame_timer)
+            while frame_timer - frame_times[0] >= 1.0:
+                frame_times.pop(0)
 
-        if display: display.send_pixels(pixels)
-        frames += 1
+            pixels = animation.get_frame(t)
 
-        if t > 0: gui.update_fps(frames / t)
-        gui.update_time(t)
-        gui.update_pixels(pixels)
-        gui.update_spec(animation.get_spec_frame(t), animation.spec_freqs)
+            if display: display.send_pixels(pixels)
 
-        gui.app.processEvents()
+            gui.update_fps(len(frame_times))
+            if not audio.is_paused():
+                gui.update_time(t)
+            gui.update_pixels(pixels)
 
-        # TODO: if fps too high, graph won't update
-        if not display:
-            time.sleep(0.01)
+            gui.app.processEvents()
 
-        if display and not display.running:
-            audio.stop()
+            if gui.pause_requested:
+                gui.pause_requested = False
+                if not audio.is_paused():
+                    audio.pause()
+                else:
+                    audio.unpause()
 
-    if display: display.stop()
-                
-    gui.stop()
-    util.timer()
+            if display and not display.running:
+                break
+    finally:
+        audio.stop()
+        if display: display.stop()    
+        gui.stop()
 
-    import pyqtgraph
-    pyqtgraph.exit()
+        util.timer()
+
+        import pyqtgraph
+        pyqtgraph.exit()

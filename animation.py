@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 
+import os.path
+
 import numpy as np
 from pyqtgraph.Qt import QtCore, QtGui
 import pyqtgraph as pg
@@ -31,15 +33,19 @@ class ExpFilter:
         return self.value
 
 _smoothing_filters = {}
-def smooth(alpha_decay=0.5, alpha_rise=0.5):
+def smooth(alpha_decay=0.5, alpha_rise=0.5, key=None):
     def decorator(f):
+        if key is None:
+            _key = f
+        else:
+            _key = key
         def new_f(*args, **kwargs):
             val = f(*args, **kwargs)
             if f not in _smoothing_filters:
-                _smoothing_filters[f] = ExpFilter(val, alpha_decay, alpha_rise)
+                _smoothing_filters[_key] = ExpFilter(val, alpha_decay, alpha_rise)
                 return val
             else:
-                return _smoothing_filters[f].update(val)
+                return _smoothing_filters[_key].update(val)
         return new_f
     return decorator
 
@@ -52,10 +58,11 @@ class Animation(object):
         util.timer('Creating spectrogram')
 
         # TODO: need to make spectrogram much more detailed, also maybe no Mel filter
-        self.spec = _make_spectrogram(audio_samples, sample_rate, 60)
+        self.spec, self.spec_freqs = _make_spectrogram(audio_samples, sample_rate, 200)
         self.frame_count = self.spec.shape[0]
         self.frame_rate = self.frame_count / self.duration
         self.prev_frame_t = 0
+        self.spec_frame_t = None
 
         self.canvas = QtGui.QImage(*config.DISPLAY_SHAPE, QtGui.QImage.Format_RGB32)
 
@@ -64,6 +71,8 @@ class Animation(object):
         self.prev_frame_t = t
 
         spec = self.get_spec_frame(t)
+        def spec_freq(freq):
+            return np.interp(freq, self.spec_freqs, spec)
 
         # TODO: maybe could do some kind of peak analysis to get specific instruments?
 
@@ -92,29 +101,29 @@ class Animation(object):
                 radius * 2,
                 radius * 2))
 
-        painter.rotate(util.lerp(t, 0, 4, 0, 360))
+        painter.rotate(util.lerp(t, 0, 20, 0, 360))
 
         blip(
             (-2.5, -1.5),
-            util.lerp(spec[13], 0.6, 0.75, 0, 1),
+            util.lerp(spec_freq(650), 0.6, 0.75, 0, 1),
             232/360)
         blip(
             (1.5, -2.5),
-            util.lerp(spec[15], 0.6, 0.75, 0, 1),
+            util.lerp(spec_freq(1050), 0.5, 0.6, 0, 1),
             232/360)
         blip(
             (2.5, 1.5),
-            util.lerp(spec[21], 0.4, 0.5, 0, 1),
+            util.lerp(spec_freq(1175), 0.4, 0.5, 0, 1),
             232/360)
         blip(
             (-1.5, 2.5),
-            util.lerp(spec[25], 0.4, 0.5, 0, 1),
+            util.lerp(spec_freq(1550), 0.45, 0.55, 0, 1),
             232/360)
 
         if t >= 22:
             blip(
                 (0, 0),
-                util.lerp(spec[3], 0.6, 0.85, 0, 1),
+                util.lerp(spec_freq(300), 0.6, 0.8, 0, 1),
                 350/360)
 
         painter.end()
@@ -125,9 +134,13 @@ class Animation(object):
         pixels = np.array(ptr).reshape(config.DISPLAY_SHAPE[1], config.DISPLAY_SHAPE[0], 4)[:, :, -2:-5:-1].transpose(1, 0, 2)
         return pixels
 
-    # @smooth(alpha_decay=0.2, alpha_rise=0.99)
+    @smooth(alpha_decay=0.2, alpha_rise=0.99, key='anispec')
     def get_spec_frame(self, t):
-        return _frame_interp(self.spec, self.frame_rate, t)
+        if self.spec_frame_t == None or self.spec_frame_t != t:
+            self.spec_frame_t = t
+            return _frame_interp(self.spec, self.frame_rate, t)
+        else:
+            return _smoothing_filters['anispec'].value
 
 def _frame_interp(frames, frame_rate, t):
     i = t * frame_rate
@@ -165,12 +178,12 @@ def _make_spectrogram(samples, sample_rate, spectrogram_width):
     window = np.hanning(frame_size)
     frames *= window
 
-    dft_size = 1024
+    dft_size = 1 << 12
     dft = np.fft.rfft(frames, n=dft_size)
     power_spectrum = np.square(np.abs(dft)) / frame_size
     spectrum_freqs = np.fft.rfftfreq(dft_size, d=1 / sample_rate)
 
-    power_spectrum = _mel_filter(power_spectrum, spectrum_freqs, spectrogram_width)
+    power_spectrum, spectrum_freqs = _mel_filter(power_spectrum, spectrum_freqs, spectrogram_width)
     # power_spectrum = np.log(power_spectrum+1)
 
     print(np.min(power_spectrum), np.max(power_spectrum))
@@ -183,14 +196,25 @@ def _make_spectrogram(samples, sample_rate, spectrogram_width):
 
     # exit()
 
-    gui.debug_layout.addViewBox(
+    img_plot = gui.debug_layout.addPlot(
         row=1,
         col=0
-    ).addItem(pg.ImageItem(
-        image=power_spectrum
-    ))
+    )
 
-    return power_spectrum
+    img_item = pg.ImageItem(
+        image=power_spectrum
+    )
+    img_plot.addItem(img_item)
+    # img_plot.addLine
+    # img_plot.getAxis('left').tickValues(spectrum_freqs[0], spectrum_freqs[-1], spectrum_freqs.shape[0])
+    # img_plot.getAxis('bottom').tickValues(0, self.duration, 1000)
+
+    spec_img = util.lerp(power_spectrum, 0, 1, 0, 0xFF, clip=True).astype(np.uint8)
+    spec_img = np.repeat(spec_img[:, :, np.newaxis], 4, 2)
+    spec_img = spec_img.transpose(1, 0, 2)
+    QtGui.QImage(spec_img.tobytes(), spec_img.shape[1], spec_img.shape[0], QtGui.QImage.Format_RGB32).save(os.path.join(os.path.dirname(__file__), 'spec.png'))
+
+    return power_spectrum, spectrum_freqs
 
 def _mel_filter(power_spectrum, spectrum_freqs, num_filters):
     def freq_to_mel(f): return 1125 * np.log(1 + f / 700)
@@ -202,19 +226,19 @@ def _mel_filter(power_spectrum, spectrum_freqs, num_filters):
 
     min_freq = 20
     # TODO: max freq should be some upper limit, or Nyquist freq?
-    max_freq = 8000#self.sample_rate // 2
+    max_freq = 4000#self.sample_rate // 2
 
     min_freq = freq_to_mel(min_freq)
     max_freq = freq_to_mel(max_freq)
 
     filter_freqs = np.linspace(min_freq, max_freq, num_filters + 2)
     filter_freqs = mel_to_freq(filter_freqs)
-    # print(filter_freqs)
-    # print(spectrum_freqs)
+    print(filter_freqs)
+    print(spectrum_freqs)
     # TODO: this rebinning with the filters could be more accurate?
     # this round really impacts lower frequency bins
-    filter_freqs = np.round(np.interp(filter_freqs, spectrum_freqs, np.arange(spec_size))).astype(np.int_)
-    # print(filter_freqs)
+    filter_freq_idxs = np.interp(filter_freqs, spectrum_freqs, np.arange(spec_size))
+    print(filter_freq_idxs)
 
     filterbanks = np.zeros((spec_size, num_filters), dtype=power_spectrum.dtype)
     filterbank_plot = gui.debug_layout.addPlot(
@@ -225,16 +249,18 @@ def _mel_filter(power_spectrum, spectrum_freqs, num_filters):
     )
     # import matplotlib.pyplot as plt
     for i in range(num_filters):
-        filter_min = filter_freqs[i]
-        filter_mid = filter_freqs[i + 1]
-        filter_max = filter_freqs[i + 2]
-        filterbanks[filter_min : filter_mid, i] = np.linspace(0, 1, filter_mid - filter_min)
-        filterbanks[filter_mid - 1 : filter_max, i] = np.linspace(1, 0, filter_max - filter_mid + 1)
-        filterbanks[:, i] /= ((filter_max - filter_min) / 2)
+        filter_min = filter_freq_idxs[i]
+        filter_mid = filter_freq_idxs[i + 1]
+        filter_max = filter_freq_idxs[i + 2]
+        filterbanks[:, i] += np.interp(np.arange(spec_size), np.linspace(filter_min, filter_mid), np.linspace(0, 1, endpoint=False), left=0, right=0)
+        filterbanks[:, i] += np.interp(np.arange(spec_size), np.linspace(filter_mid, filter_max), np.linspace(1, 0), left=0, right=0)
+        # filterbanks[filter_min : filter_mid, i] = np.linspace(0, 1, filter_mid - filter_min)
+        # filterbanks[filter_mid - 1 : filter_max, i] = np.linspace(1, 0, filter_max - filter_mid + 1)
+        # filterbanks[:, i] /= ((filter_max - filter_min) / 2)
         # if i < 5:
         #     print(filter_min, filter_mid, filter_max)
         #     print(filterbanks[:, i])
-        filterbank_plot.plot(y=filterbanks[:, i])
+        filterbank_plot.plot(x=spectrum_freqs, y=filterbanks[:, i])
         # plt.plot(filterbanks[:, i])
     # plt.show()
 
@@ -245,4 +271,4 @@ def _mel_filter(power_spectrum, spectrum_freqs, num_filters):
 
     # print(power_spectrum_filtered.shape)
 
-    return power_spectrum_filtered
+    return power_spectrum_filtered, filter_freqs[1:-1]

@@ -77,9 +77,9 @@ class GUI(object):
         if not self.closed:
             self.pixel_viewer.set_colors(pixels)
 
-    def update_spec(self, spec):
+    def update_spec(self, spec, spec_freqs):
         if not self.closed:
-            self.spec_plot_plot.setData(y=spec)
+            self.spec_plot_plot.setData(x=spec_freqs, y=spec)
 
     def update_fps(self, fps):
         if not self.closed:

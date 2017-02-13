@@ -67,7 +67,7 @@ if __name__ == '__main__':
         if t > 0: gui.update_fps(frames / t)
         gui.update_time(t)
         gui.update_pixels(pixels)
-        gui.update_spec(animation.get_spec_frame(t))
+        gui.update_spec(animation.get_spec_frame(t), animation.spec_freqs)
 
         gui.app.processEvents()
 

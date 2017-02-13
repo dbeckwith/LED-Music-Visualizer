@@ -24,7 +24,7 @@ class Display(object):
     def send_pixels(self, pixels):
         if self.running:
             assert pixels.shape == config.DISPLAY_SHAPE + (config.CHANNELS_PER_PIXEL,)
-            pixels = (np.clip(pixels, 0.0, 1.0) * 0xFF).astype(np.uint8)
+            assert pixels.dtype == np.uint8
 
             self._send_pixels(pixels)
 

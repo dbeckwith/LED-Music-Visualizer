@@ -51,6 +51,7 @@ class Animation(object):
 
         util.timer('Creating spectrogram')
 
+        # TODO: need to make spectrogram much more detailed, also maybe no Mel filter
         self.spec = _make_spectrogram(audio_samples, sample_rate, 60)
         self.frame_count = self.spec.shape[0]
         self.frame_rate = self.frame_count / self.duration
@@ -62,6 +63,8 @@ class Animation(object):
         dt = t - self.prev_frame_t
         self.prev_frame_t = t
 
+        spec = self.get_spec_frame(t)
+
         # TODO: maybe could do some kind of peak analysis to get specific instruments?
 
         self.canvas.fill(0xFF000000)
@@ -69,33 +72,58 @@ class Animation(object):
         painter = QtGui.QPainter(self.canvas)
         painter.setRenderHint(QtGui.QPainter.Antialiasing)
         painter.translate(config.DISPLAY_SHAPE[0] / 2, config.DISPLAY_SHAPE[1] / 2)
-        painter.scale(config.DISPLAY_SHAPE[0] / 2, config.DISPLAY_SHAPE[1] / 2)
+        # painter.scale(config.DISPLAY_SHAPE[0] / 2, config.DISPLAY_SHAPE[1] / 2)
 
-        pen = QtGui.QPen(QtGui.QBrush(QtCore.Qt.black), 1, QtCore.Qt.SolidLine, QtCore.Qt.FlatCap, QtCore.Qt.BevelJoin)
-        pen.setCosmetic(True)
-        painter.setPen(pen)
-        # painter.setBrush(QtGui.QBrush(QtGui.QColor(200, 0, 0)))
-        for offset in range(3):
-            angle = util.lerp(t + offset / 3, 0, 2, 0, np.pi * 2)
-            x = np.cos(angle)
-            y = np.sin(angle)
-            pen = painter.pen()
-            brush = pen.brush()
-            brush.setColor(QtGui.QColor.fromHsvF(util.lerp(offset, 0, 3, 0, 1), 1, 1))
-            pen.setBrush(brush)
-            painter.setPen(pen)
-            painter.drawLine(QtCore.QPointF(x, y), QtCore.QPointF(-x, -y))
+        def blip(center, strength, hue):
+            radius = util.lerp(strength, 0, 1, 0.5, 1.75, clip=True)
+            brightness = util.lerp(strength, 0, 1, 0.3, 1.0, clip=True)
+
+            grad = QtGui.QRadialGradient(0.5, 0.5, 0.5)
+            grad.setCoordinateMode(QtGui.QGradient.ObjectBoundingMode)
+            grad.setColorAt(0.0, QtGui.QColor.fromHsvF(hue, 0.40, 1, brightness))
+            grad.setColorAt(0.2, QtGui.QColor.fromHsvF(hue, 0.82, 1, brightness * 0.8))
+            grad.setColorAt(1.0, QtCore.Qt.transparent)
+            painter.setBrush(QtGui.QBrush(grad))
+            painter.setPen(QtCore.Qt.NoPen)
+
+            painter.drawEllipse(QtCore.QRectF(
+                center[0] - radius,
+                center[1] - radius,
+                radius * 2,
+                radius * 2))
+
+        painter.rotate(util.lerp(t, 0, 4, 0, 360))
+
+        blip(
+            (-2.5, -1.5),
+            util.lerp(spec[13], 0.6, 0.75, 0, 1),
+            232/360)
+        blip(
+            (1.5, -2.5),
+            util.lerp(spec[15], 0.6, 0.75, 0, 1),
+            232/360)
+        blip(
+            (2.5, 1.5),
+            util.lerp(spec[21], 0.4, 0.5, 0, 1),
+            232/360)
+        blip(
+            (-1.5, 2.5),
+            util.lerp(spec[25], 0.4, 0.5, 0, 1),
+            232/360)
+
+        if t >= 22:
+            blip(
+                (0, 0),
+                util.lerp(spec[3], 0.6, 0.85, 0, 1),
+                350/360)
 
         painter.end()
 
-        self.canvas.setPixel(0, 0, 0xFFFFFFFF)
-        self.canvas.setPixel(config.DISPLAY_SHAPE[0] - 1, 0, 0xFFFF0000)
-        self.canvas.setPixel(0, config.DISPLAY_SHAPE[1] - 1, 0xFF00FF00)
-        self.canvas.setPixel(config.DISPLAY_SHAPE[0] - 1, config.DISPLAY_SHAPE[1] - 1, 0xFF0000FF)
-
         ptr = self.canvas.constBits()
         ptr.setsize(self.canvas.byteCount())
-        return np.array(ptr).reshape(config.DISPLAY_SHAPE[1], config.DISPLAY_SHAPE[0], 4)[:, :, -2:-5:-1].transpose(1, 0, 2)
+
+        pixels = np.array(ptr).reshape(config.DISPLAY_SHAPE[1], config.DISPLAY_SHAPE[0], 4)[:, :, -2:-5:-1].transpose(1, 0, 2)
+        return pixels
 
     # @smooth(alpha_decay=0.2, alpha_rise=0.99)
     def get_spec_frame(self, t):

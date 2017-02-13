@@ -22,8 +22,16 @@ def timer(stage=None):
         _timer_stage = stage
         print('{}...'.format(stage))
 
-def lerp(x, old_min, old_max, new_min, new_max):
-    return (x - old_min) / (old_max - old_min) * (new_max - new_min) + new_min
+def lerp(x, old_min, old_max, new_min, new_max, clip=False):
+    new_x = (x - old_min) / (old_max - old_min) * (new_max - new_min) + new_min
+    if clip:
+        if new_min > new_max:
+            new_min, new_max = new_max, new_min
+        if new_x < new_min:
+            return new_min
+        if new_x > new_max:
+            return new_max
+    return new_x
 
 def gaussian_filter1d(input, sigma, axis=-1, order=0, output=None, mode='reflect', cval=0.0, truncate=4.0):
     if output is None:

@@ -55,7 +55,7 @@ class Animation(object):
 
         util.timer('Creating spectrogram')
 
-        self.spec, self.spec_freqs = _make_spectrogram(audio_samples, sample_rate, 200)
+        self.spec, self.spec_grad, self.spec_freqs = _make_spectrogram(audio_samples, sample_rate, 1 << 9)
         self.frame_count = self.spec.shape[0]
         self.frame_rate = self.frame_count / self.duration
         self.prev_frame_t = 0
@@ -66,8 +66,9 @@ class Animation(object):
         dt = t - self.prev_frame_t
         self.prev_frame_t = t
 
-        spec = self.get_spec_frame(t)
-        def spec_freq(freq):
+        spec = _frame_interp(self.spec, self.frame_rate, t)
+        spec_grad = _frame_interp(self.spec_grad, self.frame_rate, t)
+        def spec_freq(spec, freq):
             return np.interp(freq, self.spec_freqs, spec)
 
         # TODO: maybe could do some kind of image processing to automatically identify notes?
@@ -82,8 +83,11 @@ class Animation(object):
         # painter.scale(config.DISPLAY_SHAPE[0] / 2, config.DISPLAY_SHAPE[1] / 2)
 
         def blip(center, strength, hue, saturation, lightness):
-            radius = util.lerp(strength, 0, 1, 0.5, 1.75, clip=True)
-            brightness = util.lerp(strength, 0, 1, 0.3, 1.0, clip=True)
+            if strength == 0:
+                return
+
+            radius = util.lerp(strength, 0, 1, 0, 1.75, clip=True)
+            brightness = util.lerp(strength, 0, 1, 0, 1.0, clip=True)
 
             grad = QtGui.QRadialGradient(0.5, 0.5, 0.5)
             grad.setCoordinateMode(QtGui.QGradient.ObjectBoundingMode)
@@ -99,36 +103,82 @@ class Animation(object):
                 radius * 2,
                 radius * 2))
 
-        painter.rotate(util.lerp(t, 0, 20, 0, 360))
+        INTRO = 0.20
+        BASS = 22.13
+        LYRICS_1 = 41.36
+        LYRICS_1_KEYBOARD = 63.22
+        CHORUS_1 = 85.23
+        LYRICS_2 = 107.23
+        LYRICS_2_PERCUS = 118.25
+        CHORUS_2 = 129.13
+        GUITAR_SOLO = 151.12
+        GUITAR_SOLO_KEYBOARD = 167.00
+        CHORUS_3 = 185.12
+        OUTRO = 207.29
+        FADE = 226.27
+        END = 265.86
 
-        positions = [
-            (-2.5, -1.5),
-            (1.5, -2.5),
-            (2.5, 1.5),
-            (-1.5, 2.5),
-        ]
-        notes = [
-            (355.7, 0.65, 0.80),
-            (671.0, 0.55, 0.78),
-            # (805.1, 0.55, 0.84),
-            (1048, 0.45, 0.67),
-            (1183, 0.41, 0.59),
-        ]
-        colors = [
-            (146/360, 0.87, 1.00),
-            (204/360, 0.91, 1.00),
-            (218/360, 0.86, 0.91),
-            (231/360, 0.86, 1.00),
-        ]
+        def fade(in_t, in_fade, out_t, out_fade):
+            if in_fade == 0:
+                if t < in_t:
+                    return 0
+            elif in_fade < 0:
+                in_fade = -in_fade
+                if t < in_t - in_fade:
+                    return 0
+                if t < in_t:
+                    return util.lerp(t, in_t - in_fade, in_t, 0, 1)
+            else:
+                if t < in_t:
+                    return 0
+                if t < in_t + in_fade:
+                    return util.lerp(t, in_t, in_t + in_fade, 0, 1)
 
-        for position, note, color in zip(positions, notes, colors):
-            blip(position, util.lerp(spec_freq(note[0]), note[1], note[2], 0, 1), *color)
+            if out_fade == 0:
+                if t < out_t:
+                    return 1
+            elif out_fade < 0:
+                out_fade = -out_fade
+                if t < out_t - out_fade:
+                    return 1
+                if t < out_t:
+                    return util.lerp(t, out_t - out_fade, out_t, 1, 0)
+            else:
+                if t < out_t:
+                    return 1
+                if t < out_t + out_fade:
+                    return util.lerp(t, out_t, out_t + out_fade, 1, 0)
 
-        if t >= 22.13:
-            blip(
-                (0, 0),
-                util.lerp(spec_freq(159.7), 0.71, 0.76, 0, 1),
-                350/360, 0.85, 1)
+            return 0
+
+        beat = util.lerp(spec_freq(spec, 3920), 0.4, 0.5, 0, 1, clip=True) * fade(BASS, 0, LYRICS_1, 0)
+
+        painter.rotate(util.lerp(t + util.lerp(beat, 0, 1, 0, 1), 0, 20, 0, 360))
+
+        for position, note, color in zip([
+                (-2.5, -1.5),
+                (1.5, -2.5),
+                (2.5, 1.5),
+                (-1.5, 2.5),
+            ], [
+                (355.7, 0.65, 0.80),
+                (671.0, 0.55, 0.78),
+                # (805.1, 0.55, 0.84),
+                (1048, 0.45, 0.67),
+                (1183, 0.41, 0.59),
+            ], [
+                (146/360, 0.87, 1.00),
+                (204/360, 0.91, 1.00),
+                (218/360, 0.86, 0.91),
+                (231/360, 0.86, 1.00),
+            ]):
+            blip(position,
+                util.lerp(spec_freq(spec, note[0]), note[1], note[2], 0, 1, clip=True) * fade(INTRO, 0, 38.52, 2),
+                *color)
+
+        blip((0, 0),
+            util.lerp((spec_freq(spec, 121.3) + spec_freq(spec, 88.93) + spec_freq(spec, 94.72)) / 3, 0.76, 0.79, 0, 1, clip=True) * fade(BASS, 0, END, 0),
+            350/360, 0.85, 1)
 
         painter.end()
 
@@ -137,9 +187,6 @@ class Animation(object):
 
         pixels = np.array(ptr).reshape(config.DISPLAY_SHAPE[1], config.DISPLAY_SHAPE[0], 4)[:, :, -2:-5:-1].transpose(1, 0, 2)
         return pixels
-
-    def get_spec_frame(self, t):
-        return _frame_interp(self.spec, self.frame_rate, t)
 
 def _frame_interp(frames, frame_rate, t):
     i = t * frame_rate
@@ -167,30 +214,43 @@ def _make_spectrogram(samples, sample_rate, spectrogram_width):
     # pad samples to fit last frame
     pad_samples = (frame_count - 1) * frame_step + frame_size - len(samples)
     if pad_samples:
+        print('Padding samples by {:,d}'.format(pad_samples))
         samples = np.concatenate((samples, np.zeros(pad_samples)))
 
     frames = np.empty((frame_count, frame_size), dtype=samples.dtype)
+    print('Creating frames of shape {:,d} x {:,d}'.format(frame_count, frame_size))
     for frame_idx in range(frame_count):
         sample_idx = frame_idx * frame_step
         frames[frame_idx] = samples[sample_idx : sample_idx + frame_size]
 
+    print('Applying Hanning window')
     window = np.hanning(frame_size)
     frames *= window
 
-    dft_size = 1 << 12
+    dft_size = 1 << 13
+    print('Calculating RFFT of size {:,d}'.format(dft_size))
     dft = np.fft.rfft(frames, n=dft_size)
+    print('Converting DFT to reals')
     power_spectrum = np.square(np.abs(dft)) / frame_size
+    print('Calculating spectrum frequencies')
     spectrum_freqs = np.fft.rfftfreq(dft_size, d=1 / sample_rate)
 
+    print('Applying Mel filter')
     power_spectrum, spectrum_freqs = _mel_filter(power_spectrum, spectrum_freqs, spectrogram_width)
     # power_spectrum = np.log(power_spectrum+1)
 
+    print('Scaling spectrum')
     power_spectrum = np.log(power_spectrum + 1)
     power_spectrum /= np.max(power_spectrum)
 
-    power_spectrum = util.gaussian_filter1d(power_spectrum, 2, axis=0)
+    print('Calculating spectrum gradient')
+    power_spectrum_grad = np.gradient(power_spectrum, 1, axis=0)
 
-    return power_spectrum, spectrum_freqs
+    print('Blurring spectrum')
+    power_spectrum = util.gaussian_filter1d(power_spectrum, 2, axis=0)
+    power_spectrum_grad = util.gaussian_filter1d(power_spectrum_grad, 2, axis=0)
+
+    return power_spectrum, power_spectrum_grad, spectrum_freqs
 
 def _mel_filter(power_spectrum, spectrum_freqs, num_filters):
     def freq_to_mel(f): return 1125 * np.log(1 + f / 700)
@@ -205,45 +265,36 @@ def _mel_filter(power_spectrum, spectrum_freqs, num_filters):
     min_freq = freq_to_mel(min_freq)
     max_freq = freq_to_mel(max_freq)
 
+    print('Converting frequencies to Mel scale')
     filter_freqs = np.linspace(min_freq, max_freq, num_filters + 2)
     filter_freqs = mel_to_freq(filter_freqs)
-    print('spectrum frequencies:')
-    print(spectrum_freqs)
-    print('filter frequencies:')
-    print(filter_freqs)
+    # print('spectrum frequencies:')
+    # print(spectrum_freqs)
+    # print('filter frequencies:')
+    # print(filter_freqs)
+    print('Calculating frequency mapping')
     filter_freq_idxs = np.interp(filter_freqs, spectrum_freqs, np.arange(spec_size))
-    print('filter frequency indicies:')
-    print(filter_freq_idxs)
+    # print('filter frequency indicies:')
+    # print(filter_freq_idxs)
 
     filterbanks = np.zeros((spec_size, num_filters), dtype=power_spectrum.dtype)
-    filterbank_plot = gui.debug_layout.addPlot(
-        row=0,
-        col=0,
-        title='Mel Filterbanks',
-        labels={'left': 'Coefficient', 'bottom': 'Frequency'}
-    )
-    # import matplotlib.pyplot as plt
+    # filterbank_plot = gui.debug_layout.addPlot(
+    #     row=0,
+    #     col=0,
+    #     title='Mel Filterbanks',
+    #     labels={'left': 'Coefficient', 'bottom': 'Frequency'}
+    # )
+    print('Creating filterbanks')
     for i in range(num_filters):
         filter_min = filter_freq_idxs[i]
         filter_mid = filter_freq_idxs[i + 1]
         filter_max = filter_freq_idxs[i + 2]
         filterbanks[:, i] += np.interp(np.arange(spec_size), np.linspace(filter_min, filter_mid), np.linspace(0, 1, endpoint=False), left=0, right=0)
         filterbanks[:, i] += np.interp(np.arange(spec_size), np.linspace(filter_mid, filter_max), np.linspace(1, 0), left=0, right=0)
-        # filterbanks[filter_min : filter_mid, i] = np.linspace(0, 1, filter_mid - filter_min)
-        # filterbanks[filter_mid - 1 : filter_max, i] = np.linspace(1, 0, filter_max - filter_mid + 1)
-        # filterbanks[:, i] /= ((filter_max - filter_min) / 2)
-        # if i < 5:
-        #     print(filter_min, filter_mid, filter_max)
-        #     print(filterbanks[:, i])
-        filterbank_plot.plot(x=spectrum_freqs, y=filterbanks[:, i])
-        # plt.plot(filterbanks[:, i])
-    # plt.show()
+        # filterbanks[:, i] /= (filter_max - filter_min) / 2
+        # filterbank_plot.plot(x=spectrum_freqs, y=filterbanks[:, i])
 
-    # print(power_spectrum.shape)
-    # print(filterbanks.shape)
-
+    print('Applying filterbanks to spectrum')
     power_spectrum_filtered = np.dot(power_spectrum, filterbanks)
-
-    # print(power_spectrum_filtered.shape)
 
     return power_spectrum_filtered, filter_freqs[1:-1]

@@ -4,6 +4,7 @@
 import os
 import time
 import signal
+import traceback
 
 import config
 import util
@@ -87,6 +88,8 @@ if __name__ == '__main__':
 
             if display and not display.running:
                 break
+    except:
+        traceback.print_exc()
     finally:
         audio.stop()
         if display: display.stop()    

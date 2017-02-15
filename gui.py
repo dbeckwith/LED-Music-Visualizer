@@ -43,7 +43,7 @@ class GUI(object):
         pixel_viewer_proxy.setWidget(pixel_viewer)
         layout.addItem(pixel_viewer_proxy)
 
-        layout.layout.setRowStretchFactor(1, 1)
+        layout.layout.setRowStretchFactor(1, 0)
         layout.nextRow()
 
         labels_layout = pg.GraphicsLayout()

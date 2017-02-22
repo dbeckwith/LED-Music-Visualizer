@@ -48,6 +48,8 @@ if __name__ == '__main__':
     signal.signal(signal.SIGINT, sigint)
     gui.on_close = lambda: audio.stop()
 
+    gui.spec_viewer.on_scrub = lambda t: audio.skip_to(t)
+
     gui.spec_viewer.set_spectrogram(animation.spec, animation.spec_freqs, animation.frame_rate)
 
     gui.start(args.show_debug_window)
@@ -73,7 +75,7 @@ if __name__ == '__main__':
             if display: display.send_pixels(pixels)
 
             gui.update_fps(len(frame_times))
-            if not audio.is_paused():
+            if not audio.is_paused:
                 gui.update_time(t)
             gui.update_pixels(pixels)
 
@@ -81,7 +83,7 @@ if __name__ == '__main__':
 
             if gui.pause_requested:
                 gui.pause_requested = False
-                if not audio.is_paused():
+                if not audio.is_paused:
                     audio.pause()
                 else:
                     audio.unpause()

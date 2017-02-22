@@ -60,7 +60,7 @@ class Audio(object):
     def start(self):
         util.timer('Starting audio')
         self.running = True
-        self.stream.start_stream()
+        # self.stream.start_stream()
 
     def stop(self):
         if self.running:
@@ -78,15 +78,20 @@ class Audio(object):
         if self.running:
             self.stream.start_stream()
 
+    @property
     def is_paused(self):
         return self.running and self.stream.is_stopped()
+
+    def skip_to(self, time):
+        self.stream_pos = int(util.lerp(time, 0, self.duration, 0, self.sample_count))
 
     def _update_stream(self, in_data, frame_count, time_info, status_flags):
         end = self.stream_pos + frame_count
         if end >= self.samples.shape[0]:
             end = self.samples.shape[0]
+            # TODO: should pad with zeros so actually return frame_count frames?
             self.stop()
-        data = self.samples[self.stream_pos:end, :].flatten()
+        data = self.samples[self.stream_pos : end, :].flatten()
         data = (data * self.audio_volume).astype(data.dtype)
         self.stream_pos += frame_count
         return (data, pyaudio.paContinue)

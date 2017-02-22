@@ -49,7 +49,7 @@ class GUI(object):
         labels_layout = pg.GraphicsLayout()
         fps_label = labels_layout.addLabel('FPS: ?')
         time_label = labels_layout.addLabel('Elapsed Time: ?')
-        pause_label = labels_layout.addLabel('Pause')
+        pause_label = labels_layout.addLabel('Resume')
         pause_label.mousePressEvent = self.__pause_pressed
         layout.addItem(labels_layout)
 
@@ -119,6 +119,8 @@ class SpectrogramViewer(QtGui.QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
 
+        self.on_scrub = None
+
         self.layout = QtGui.QVBoxLayout()
         self.layout.setContentsMargins(2, 2, 2, 2)
         self.setLayout(self.layout)
@@ -161,8 +163,11 @@ class SpectrogramViewer(QtGui.QWidget):
         # self.translate(-self.spec.shape[0] / 2, 0)
 
     def update_time(self, time):
-        self.time_line.setX(util.lerp(time, 0, self.duration, 0, self.spec_img.width()))
+        self._update_time_line(time)
         self.view.centerOn(self.time_line)
+
+    def _update_time_line(self, time):
+        self.time_line.setX(util.lerp(time, 0, self.duration, 0, self.spec_img.width()))
 
     class SpecGraphicsItem(QtGui.QGraphicsPixmapItem):
         def __init__(self, pixmap, viewer, scene):
@@ -179,6 +184,13 @@ class SpectrogramViewer(QtGui.QWidget):
             time = util.lerp(time_idx, 0, self.viewer.frame_count, 0, self.viewer.duration)
             freq = self.viewer.spec_freqs[freq_idx]
             self.viewer.value_label.setText('{:.4g} Hz at {:.3f} secs: {:.3f}'.format(freq, time, value))
+
+        def mousePressEvent(self, event):
+            if self.viewer.on_scrub is not None:
+                time_idx = int(event.pos().x())
+                time = util.lerp(time_idx, 0, self.viewer.frame_count, 0, self.viewer.duration)
+                self.viewer.on_scrub(time)
+                self.viewer._update_time_line(time)
 
 class PixelViewer(QtGui.QGraphicsView):
     def __init__(self, parent=None):

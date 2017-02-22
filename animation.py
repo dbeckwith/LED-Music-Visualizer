@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 
+import os
+
 import numpy as np
 from pyqtgraph.Qt import QtCore, QtGui
 import pyqtgraph as pg
@@ -48,14 +50,23 @@ def smooth(alpha_decay=0.5, alpha_rise=0.5, key=None):
     return decorator
 
 class Animation(object):
+    cache_path = os.path.join(os.path.dirname(__file__), 'spec_cache.npy')
+
     def __init__(self, audio_samples, sample_rate):
         self.sample_rate = sample_rate
         self.sample_count = audio_samples.shape[0]
         self.duration = self.sample_count / self.sample_rate
 
-        util.timer('Creating spectrogram')
+        if os.path.exists(self.cache_path):
+            util.timer('Loading cached spectrogram')
+            spec_data = np.load(self.cache_path)
+        else:
+            util.timer('Creating spectrogram')
+            spec_data = _make_spectrogram(audio_samples, self.sample_rate, 1 << 9)
+            util.timer('Saving spectrogram to cache')
+            np.save(self.cache_path, np.array(spec_data))
+        self.spec, self.spec_grad, self.spec_freqs = spec_data
 
-        self.spec, self.spec_grad, self.spec_freqs = _make_spectrogram(audio_samples, sample_rate, 1 << 9)
         self.frame_count = self.spec.shape[0]
         self.frame_rate = self.frame_count / self.duration
         self.prev_frame_t = 0
@@ -153,7 +164,9 @@ class Animation(object):
 
         beat = util.lerp(spec_freq(spec, 3920), 0.4, 0.5, 0, 1, clip=True) * fade(BASS, 0, LYRICS_1, 0)
 
-        painter.rotate(util.lerp(t + util.lerp(beat, 0, 1, 0, 1), 0, 20, 0, 360))
+        painter.scale(1, 1)
+        painter.rotate(util.lerp(t, 0, 20, 0, 360))
+        painter.translate(0 + util.lerp(beat, 0, 1, 0, 1), 0)
 
         for position, note, color in zip([
                 (-2.5, -1.5),

@@ -66,6 +66,7 @@ class Animation(object):
             util.timer('Saving spectrogram to cache')
             np.save(self.cache_path, np.array(spec_data))
         self.spec, self.spec_grad, self.spec_freqs = spec_data
+        self.spec_idxs = np.arange(len(self.spec_freqs))
 
         self.frame_count = self.spec.shape[0]
         self.frame_rate = self.frame_count / self.duration
@@ -79,8 +80,18 @@ class Animation(object):
 
         spec = _frame_interp(self.spec, self.frame_rate, t)
         spec_grad = _frame_interp(self.spec_grad, self.frame_rate, t)
-        def spec_freq(spec, freq):
+
+        def spec_power(freq):
             return np.interp(freq, self.spec_freqs, spec)
+
+        def spec_peak(min_freq, max_freq):
+            from_idx = int(np.floor(np.interp(min_freq, self.spec_freqs, self.spec_idxs)))
+            to_idx = int(np.ceil(np.interp(max_freq, self.spec_freqs, self.spec_idxs)))
+            spec_range = spec[from_idx : to_idx]
+            peak_idx = np.argmax(spec_range) + from_idx
+            peak_val = spec[peak_idx]
+            peak_freq = np.interp(peak_idx, self.spec_idxs, self.spec_freqs)
+            return np.array([util.lerp(peak_freq, min_freq, max_freq, 0, 1), peak_val])
 
         # TODO: maybe could do some kind of image processing to automatically identify notes?
         # TODO: capture percussion or at least beat
@@ -114,6 +125,28 @@ class Animation(object):
                 radius * 2,
                 radius * 2))
 
+        def edge_glow(strength, hue, saturation, lightness):
+            if strength == 0:
+                return
+
+            radius = 5.5
+            brightness = util.lerp(strength, 0, 1, 0, 1.0, clip=True)
+
+            grad = QtGui.QRadialGradient(0.5, 0.5, 0.5)
+            grad.setCoordinateMode(QtGui.QGradient.ObjectBoundingMode)
+            grad.setColorAt(0.0, QtCore.Qt.transparent)
+            grad.setColorAt(0.6, QtCore.Qt.transparent)
+            grad.setColorAt(0.8, QtGui.QColor.fromHsvF(hue, saturation, lightness, brightness * 0.8))
+            grad.setColorAt(1.0, QtGui.QColor.fromHsvF(hue, saturation * 0.3, lightness, brightness))
+            painter.setBrush(QtGui.QBrush(grad))
+            painter.setPen(QtCore.Qt.NoPen)
+
+            painter.drawEllipse(QtCore.QRectF(
+                -radius,
+                -radius,
+                radius * 2,
+                radius * 2))
+
         INTRO = 0.20
         BASS = 22.13
         LYRICS_1 = 41.36
@@ -130,6 +163,7 @@ class Animation(object):
         END = 265.86
 
         def fade(in_t, in_fade, out_t, out_fade):
+            # TODO: allow multiple ranges
             if in_fade == 0:
                 if t < in_t:
                     return 0
@@ -162,11 +196,15 @@ class Animation(object):
 
             return 0
 
-        beat = util.lerp(spec_freq(spec, 3920), 0.4, 0.5, 0, 1, clip=True) * fade(BASS, 0, LYRICS_1, 0)
+        beat_power = util.lerp(spec_power(3920), 0.4, 0.5, 0, 1, clip=True) * fade(BASS, 0, LYRICS_1, 0)
+        bass_power = util.lerp((spec_power(121.3) + spec_power(88.93) + spec_power(94.72)) / 3, 0.76, 0.79, 0, 1, clip=True) * fade(BASS, 0, END, 0)
+        lyric_pos, lyric_power = spec_peak(523.6, 774.4) * fade(LYRICS_1, 0.1, GUITAR_SOLO, 0)
+
+        # edge_glow(lyric_pos, 82/360, 0.40, 1)
 
         painter.scale(1, 1)
         painter.rotate(util.lerp(t, 0, 20, 0, 360))
-        painter.translate(0 + util.lerp(beat, 0, 1, 0, 1), 0)
+        painter.translate(0 + util.lerp(beat_power, 0, 1, 0, 1), 0)
 
         for position, note, color in zip([
                 (-2.5, -1.5),
@@ -185,13 +223,14 @@ class Animation(object):
                 (218/360, 0.86, 0.91),
                 (231/360, 0.86, 1.00),
             ]):
-            blip(position,
-                util.lerp(spec_freq(spec, note[0]), note[1], note[2], 0, 1, clip=True) * fade(INTRO, 0, 38.52, 2),
-                *color)
+            note_power = util.lerp(spec_power(note[0]), note[1], note[2], 0, 1, clip=True) * fade(INTRO, 0, 38.52, 2)
+            blip(position, note_power, *color)
 
-        blip((0, 0),
-            util.lerp((spec_freq(spec, 121.3) + spec_freq(spec, 88.93) + spec_freq(spec, 94.72)) / 3, 0.76, 0.79, 0, 1, clip=True) * fade(BASS, 0, END, 0),
-            350/360, 0.85, 1)
+        blip((0, 0), bass_power, 350/360, 0.85, 1)
+
+        for ang in np.linspace(0, 2 * np.pi, 4, endpoint=False):
+            r = util.lerp(lyric_pos, 0, 1, 2, 4)
+            blip((r * np.cos(ang), r * np.sin(ang)), lyric_power, 82/360, 0.40, 1)
 
         painter.end()
 

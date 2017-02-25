@@ -70,14 +70,10 @@ class Animation(object):
 
         self.frame_count = self.spec.shape[0]
         self.frame_rate = self.frame_count / self.duration
-        self.prev_frame_t = 0
 
         self.canvas = QtGui.QImage(*config.DISPLAY_SHAPE, QtGui.QImage.Format_RGB32)
 
     def get_frame(self, t):
-        dt = t - self.prev_frame_t
-        self.prev_frame_t = t
-
         spec = _frame_interp(self.spec, self.frame_rate, t)
         spec_grad = _frame_interp(self.spec_grad, self.frame_rate, t)
 
@@ -107,6 +103,7 @@ class Animation(object):
         def blip(center, strength, hue, saturation, lightness):
             if strength == 0:
                 return
+            hue %= 1
 
             radius = util.lerp(strength, 0, 1, 0, 1.75, clip=True)
             brightness = util.lerp(strength, 0, 1, 0, 1.0, clip=True)
@@ -128,6 +125,7 @@ class Animation(object):
         def edge_glow(strength, hue, saturation, lightness):
             if strength == 0:
                 return
+            hue %= 1
 
             radius = 5.5
             brightness = util.lerp(strength, 0, 1, 0, 1.0, clip=True)
@@ -162,42 +160,43 @@ class Animation(object):
         FADE = 226.27
         END = 265.86
 
-        def fade(in_t, in_fade, out_t, out_fade):
-            # TODO: allow multiple ranges
-            if in_fade == 0:
-                if t < in_t:
-                    return 0
-            elif in_fade < 0:
-                in_fade = -in_fade
-                if t < in_t - in_fade:
-                    return 0
-                if t < in_t:
-                    return util.lerp(t, in_t - in_fade, in_t, 0, 1)
-            else:
-                if t < in_t:
-                    return 0
-                if t < in_t + in_fade:
-                    return util.lerp(t, in_t, in_t + in_fade, 0, 1)
+        def fade(*args):
+            assert args and len(args) % 4 == 0
+            for i in range(0, len(args), 4):
+                in_t, in_fade, out_t, out_fade = args[i : i + 4]
+                if in_fade == 0:
+                    if t < in_t:
+                        return 0
+                elif in_fade < 0:
+                    in_fade = -in_fade
+                    if t < in_t - in_fade:
+                        return 0
+                    if t < in_t:
+                        return util.lerp(t, in_t - in_fade, in_t, 0, 1)
+                else:
+                    if t < in_t:
+                        return 0
+                    if t < in_t + in_fade:
+                        return util.lerp(t, in_t, in_t + in_fade, 0, 1)
 
-            if out_fade == 0:
-                if t < out_t:
-                    return 1
-            elif out_fade < 0:
-                out_fade = -out_fade
-                if t < out_t - out_fade:
-                    return 1
-                if t < out_t:
-                    return util.lerp(t, out_t - out_fade, out_t, 1, 0)
-            else:
-                if t < out_t:
-                    return 1
-                if t < out_t + out_fade:
-                    return util.lerp(t, out_t, out_t + out_fade, 1, 0)
-
+                if out_fade == 0:
+                    if t < out_t:
+                        return 1
+                elif out_fade < 0:
+                    out_fade = -out_fade
+                    if t < out_t - out_fade:
+                        return 1
+                    if t < out_t:
+                        return util.lerp(t, out_t - out_fade, out_t, 1, 0)
+                else:
+                    if t < out_t:
+                        return 1
+                    if t < out_t + out_fade:
+                        return util.lerp(t, out_t, out_t + out_fade, 1, 0)
             return 0
 
         beat_power = util.lerp(spec_power(3920), 0.4, 0.5, 0, 1, clip=True) * fade(BASS, 0, LYRICS_1, 0)
-        bass_power = util.lerp((spec_power(121.3) + spec_power(88.93) + spec_power(94.72)) / 3, 0.76, 0.79, 0, 1, clip=True) * fade(BASS, 0, END, 0)
+        bass_pos, bass_power = spec_peak(20, 174) * fade(BASS, 0, END, 0) # TODO: try to get clearer variation in bass_pos
         lyric_pos, lyric_power = spec_peak(523.6, 774.4) * fade(LYRICS_1, 0.1, GUITAR_SOLO, 0)
 
         # edge_glow(lyric_pos, 82/360, 0.40, 1)
@@ -206,12 +205,8 @@ class Animation(object):
         painter.rotate(util.lerp(t, 0, 20, 0, 360))
         painter.translate(0 + util.lerp(beat_power, 0, 1, 0, 1), 0)
 
-        for position, note, color in zip([
-                (-2.5, -1.5),
-                (1.5, -2.5),
-                (2.5, 1.5),
-                (-1.5, 2.5),
-            ], [
+        for ang, note, color in zip(
+            np.linspace(0, 2 * np.pi, 4, endpoint=False), [
                 (355.7, 0.65, 0.80),
                 (671.0, 0.55, 0.78),
                 # (805.1, 0.55, 0.84),
@@ -223,12 +218,14 @@ class Animation(object):
                 (218/360, 0.86, 0.91),
                 (231/360, 0.86, 1.00),
             ]):
-            note_power = util.lerp(spec_power(note[0]), note[1], note[2], 0, 1, clip=True) * fade(INTRO, 0, 38.52, 2)
-            blip(position, note_power, *color)
+            r = 2.91
+            note_power = util.lerp(spec_power(note[0]), note[1], note[2], 0, 1, clip=True) * fade(INTRO, 0, LYRICS_1 - 2.84, 2, CHORUS_1, 0, LYRICS_2, -2)
+            blip((r * np.cos(ang), r * np.sin(ang)), note_power, *color)
 
-        blip((0, 0), bass_power, 350/360, 0.85, 1)
+        blip((0, 0), bass_power, util.lerp(bass_pos, 0, 1, 380, 280)/360, 0.85, 1)
 
         for ang in np.linspace(0, 2 * np.pi, 4, endpoint=False):
+            ang += 2 * np.pi / 8
             r = util.lerp(lyric_pos, 0, 1, 2, 4)
             blip((r * np.cos(ang), r * np.sin(ang)), lyric_power, 82/360, 0.40, 1)
 

@@ -202,16 +202,79 @@ class Animation(object):
 
         # edge_glow(lyric_pos, 82/360, 0.40, 1)
 
+        # LYRICS PIANO
+        lyrics_piano_blip_pos = [
+            (-4, -4),
+            (-4,  4),
+            ( 4,  4),
+            ( 4, -4),
+        ]
+        lyrics_piano_blip_colors = [
+            (146/360, 0.87, 1.00),
+            (204/360, 0.91, 1.00),
+            (218/360, 0.86, 0.91),
+            (231/360, 0.86, 1.00),
+        ]
+        lyrics_piano_note_offsets = [
+             63.31,
+             74.28,
+            107.22,
+            118.18,
+        ]
+        lyrics_piano_note_timings = [
+            (63.31, 0, 63.95,    0),
+            (63.68, 0, 64.28,    0),
+            (63.99, 0, 64.68,    0),
+            (64.36, 0, 65.93, -0.5),
+
+            (66.06, 0, 66.62,    0),
+            (66.40, 0, 66.98,    0),
+            (66.83, 0, 67.32,    0),
+            (67.10, 0, 68.48, -0.5),
+
+            (68.71, 0, 69.43,    0),
+            (69.15, 0, 69.50,    0),
+            (69.50, 0, 70.02,    0),
+            (69.86, 0, 71.37, -0.5),
+
+            (71.26, 0, 71.48,  0.5),
+            (71.38, 0, 72.38, -0.5),
+        ]
+        lyrics_piano_note_blip_indicies = [
+            0, 1, 2, 3,
+
+            0, 1, 2, 3,
+
+            0, 2, 1, 3,
+
+            2, 1,
+        ]
+        for offset in lyrics_piano_note_offsets:
+            for blip_index, timing in zip(lyrics_piano_note_blip_indicies, lyrics_piano_note_timings):
+                base_offset = lyrics_piano_note_offsets[0]
+                timing = (
+                    timing[0] - base_offset + offset,
+                    timing[1],
+                    timing[2] - base_offset + offset,
+                    timing[3]
+                )
+                pos = lyrics_piano_blip_pos[blip_index]
+                color = lyrics_piano_blip_colors[blip_index]
+                blip(pos, fade(*timing), *color)
+
+        # FRECKLES
         freckle_spacing = np.linspace(-2.5, 2.5, 3)
         for y in range(3):
             for x in range(3):
                 if not (x == 1 and y == 1):
                     blip((freckle_spacing[x], freckle_spacing[y]), freckle_power * 0.5, 200/360, 0.5, 1.0)
 
+        # painter.scale(util.lerp(t, 47.55, 49.20, 1, -1, clip=True) * util.lerp(t, 50.94, 51.93, 1, -1, clip=True), 1)
         painter.scale(1, 1)
         painter.rotate(util.lerp(t, 0, 20, 0, 360))
         painter.translate(0 + util.lerp(beat_power, 0, 1, 0, 1), 0)
 
+        # BLIPS
         for ang, note, color in zip(
             np.linspace(0, 2 * np.pi, 4, endpoint=False), [
                 (355.7, 0.65, 0.80),
@@ -229,10 +292,15 @@ class Animation(object):
             note_power = util.lerp(spec_power(note[0]), note[1], note[2], 0, 1, clip=True) * fade(INTRO, 0, LYRICS_1 - 2.84, 2, CHORUS_1, 0, LYRICS_2, -2)
             blip((r * np.cos(ang), r * np.sin(ang)), note_power, *color)
 
+        # BASS
         blip((0, 0), bass_power, util.lerp(bass_pos, 0, 1, 380, 280)/360, 0.85, 1)
 
+        # LYRICS
         for ang in np.linspace(0, 2 * np.pi, 4, endpoint=False):
             ang += 2 * np.pi / 8
+            ang -= 2 * np.pi / 2 * fade(52.33, 53.22-52.33, GUITAR_SOLO, 0) ** (1 / 2)
+            ang -= 2 * np.pi / 2 * fade(63.00, 64.36-63.00, GUITAR_SOLO, 0) ** (1 / 2)
+            ang -= 2 * np.pi / 2 * fade(73.99, 75.33-73.99, GUITAR_SOLO, 0) ** (1 / 2)
             r = util.lerp(lyric_pos, 0, 1, 2, 4)
             blip((r * np.cos(ang), r * np.sin(ang)), lyric_power, 82/360, 0.40, 1)
 
@@ -279,8 +347,10 @@ def _make_spectrogram(samples, sample_rate, spectrogram_width):
         sample_idx = frame_idx * frame_step
         frames[frame_idx] = samples[sample_idx : sample_idx + frame_size]
 
-    print('Applying Hanning window')
+    print('Applying frame window')
     window = np.hanning(frame_size)
+    # n = np.linspace(0, 1, frame_size)
+    # window = 0.355768 - 0.487396 * np.cos(2 * np.pi * n) + 0.144232 * np.cos(4 * np.pi * n) - 0.012604 * np.cos(6 * np.pi * n)
     frames *= window
 
     dft_size = 1 << 13

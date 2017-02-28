@@ -198,8 +198,15 @@ class Animation(object):
         beat_power = util.lerp(spec_power(3920), 0.4, 0.5, 0, 1, clip=True) * fade(BASS, 0, LYRICS_1, 0)
         bass_pos, bass_power = spec_peak(20, 174) * fade(BASS, 0, END, 0) # TODO: try to get clearer variation in bass_pos
         lyric_pos, lyric_power = spec_peak(523.6, 774.4) * fade(LYRICS_1, 0.1, GUITAR_SOLO, 0)
+        freckle_power = fade(45.5, -0.4, 47.1, -0.3)
 
         # edge_glow(lyric_pos, 82/360, 0.40, 1)
+
+        freckle_spacing = np.linspace(-2.5, 2.5, 3)
+        for y in range(3):
+            for x in range(3):
+                if not (x == 1 and y == 1):
+                    blip((freckle_spacing[x], freckle_spacing[y]), freckle_power * 0.5, 200/360, 0.5, 1.0)
 
         painter.scale(1, 1)
         painter.rotate(util.lerp(t, 0, 20, 0, 360))

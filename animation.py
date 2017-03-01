@@ -72,6 +72,8 @@ class Animation(object):
         self.frame_rate = self.frame_count / self.duration
 
         self.canvas = QtGui.QImage(*config.DISPLAY_SHAPE, QtGui.QImage.Format_RGB32)
+        self.lyric_pos_filter = ExpFilter(0, 0.1, 0.1)
+        self.chorus_bg_pos_filter = ExpFilter(0, 0.1, 0.1)
 
     def get_frame(self, t):
         spec = _frame_interp(self.spec, self.frame_rate, t)
@@ -88,10 +90,6 @@ class Animation(object):
             peak_val = spec[peak_idx]
             peak_freq = np.interp(peak_idx, self.spec_idxs, self.spec_freqs)
             return np.array([util.lerp(peak_freq, min_freq, max_freq, 0, 1), peak_val])
-
-        # TODO: maybe could do some kind of image processing to automatically identify notes?
-        # TODO: capture percussion or at least beat
-        # could modulate rotation on beat
 
         self.canvas.fill(0xFF000000)
 
@@ -195,33 +193,46 @@ class Animation(object):
                         return util.lerp(t, out_t, out_t + out_fade, 1, 0)
             return 0
 
-        beat_power = util.lerp(spec_power(3920), 0.4, 0.5, 0, 1, clip=True) * fade(BASS, 0, LYRICS_1, 0)
+        beat_power = util.lerp(spec_power(3920), 0.4, 0.5, 0, 1, clip=True) * fade(BASS, 0, LYRICS_1, 0) + \
+            util.lerp(spec_power(3920), 0.39, 0.67, 0, 1, clip=True) * fade(OUTRO, 0, END, 0)
         bass_pos, bass_power = spec_peak(20, 174) * fade(BASS, 0, END, 0) # TODO: try to get clearer variation in bass_pos
-        lyric_pos, lyric_power = spec_peak(523.6, 774.4) * fade(LYRICS_1, 0.1, GUITAR_SOLO, 0)
+        lyric_pos, lyric_power = spec_peak(523.6, 774.4) * fade(
+            LYRICS_1, 0.1, GUITAR_SOLO, -2.4,
+            CHORUS_3, -1, OUTRO, -2.4)
         freckle_power = fade(45.5, -0.4, 47.1, -0.3)
+        chorus_bg_pos, chorus_bg_power = spec_peak(1672, 2169) * fade(
+            CHORUS_1, 0, LYRICS_2, -2.4,
+            CHORUS_2, 0, GUITAR_SOLO, -2.4,
+            CHORUS_3, -1, OUTRO, -2.4)
 
-        # edge_glow(lyric_pos, 82/360, 0.40, 1)
+        self.lyric_pos_filter.update(lyric_pos)
+        self.chorus_bg_pos_filter.update(chorus_bg_pos)
 
-        # LYRICS PIANO
-        lyrics_piano_blip_pos = [
+
+        edge_glow(chorus_bg_power, util.lerp(self.chorus_bg_pos_filter.value, 0, 1, 123, 50)/360, 0.80, 0.60)
+
+        # KEYBOARD
+        keyboard_blip_pos = [
             (-4, -4),
             (-4,  4),
             ( 4,  4),
             ( 4, -4),
         ]
-        lyrics_piano_blip_colors = [
+        keyboard_blip_colors = [
             (146/360, 0.87, 1.00),
             (204/360, 0.91, 1.00),
             (218/360, 0.86, 0.91),
             (231/360, 0.86, 1.00),
         ]
-        lyrics_piano_note_offsets = [
+        keyboard_note_offsets = [
              63.31,
              74.28,
             107.22,
             118.18,
+            167.70,
+            175.82,
         ]
-        lyrics_piano_note_timings = [
+        keyboard_note_timings = [
             (63.31, 0, 63.95,    0),
             (63.68, 0, 64.28,    0),
             (63.99, 0, 64.68,    0),
@@ -240,7 +251,7 @@ class Animation(object):
             (71.26, 0, 71.48,  0.5),
             (71.38, 0, 72.38, -0.5),
         ]
-        lyrics_piano_note_blip_indicies = [
+        keyboard_note_blip_indicies = [
             0, 1, 2, 3,
 
             0, 1, 2, 3,
@@ -249,17 +260,17 @@ class Animation(object):
 
             2, 1,
         ]
-        for offset in lyrics_piano_note_offsets:
-            for blip_index, timing in zip(lyrics_piano_note_blip_indicies, lyrics_piano_note_timings):
-                base_offset = lyrics_piano_note_offsets[0]
+        for offset in keyboard_note_offsets:
+            for blip_index, timing in zip(keyboard_note_blip_indicies, keyboard_note_timings):
+                base_offset = keyboard_note_offsets[0]
                 timing = (
                     timing[0] - base_offset + offset,
                     timing[1],
                     timing[2] - base_offset + offset,
                     timing[3]
                 )
-                pos = lyrics_piano_blip_pos[blip_index]
-                color = lyrics_piano_blip_colors[blip_index]
+                pos = keyboard_blip_pos[blip_index]
+                color = keyboard_blip_colors[blip_index]
                 blip(pos, fade(*timing), *color)
 
         # FRECKLES
@@ -269,6 +280,7 @@ class Animation(object):
                 if not (x == 1 and y == 1):
                     blip((freckle_spacing[x], freckle_spacing[y]), freckle_power * 0.5, 200/360, 0.5, 1.0)
 
+        painter.save()
         # painter.scale(util.lerp(t, 47.55, 49.20, 1, -1, clip=True) * util.lerp(t, 50.94, 51.93, 1, -1, clip=True), 1)
         painter.scale(1, 1)
         painter.rotate(util.lerp(t, 0, 20, 0, 360))
@@ -289,7 +301,9 @@ class Animation(object):
                 (231/360, 0.86, 1.00),
             ]):
             r = 2.91
-            note_power = util.lerp(spec_power(note[0]), note[1], note[2], 0, 1, clip=True) * fade(INTRO, 0, LYRICS_1 - 2.84, 2, CHORUS_1, 0, LYRICS_2, -2)
+            note_power = util.lerp(spec_power(note[0]), note[1], note[2], 0, 1, clip=True) * fade(
+                INTRO, 0, LYRICS_1 - 2.84, 2)
+                #GUITAR_SOLO, 0, CHORUS_3, 0)
             blip((r * np.cos(ang), r * np.sin(ang)), note_power, *color)
 
         # BASS
@@ -298,11 +312,106 @@ class Animation(object):
         # LYRICS
         for ang in np.linspace(0, 2 * np.pi, 4, endpoint=False):
             ang += 2 * np.pi / 8
+            # spin on verse starts
             ang -= 2 * np.pi / 2 * fade(52.33, 53.22-52.33, GUITAR_SOLO, 0) ** (1 / 2)
             ang -= 2 * np.pi / 2 * fade(63.00, 64.36-63.00, GUITAR_SOLO, 0) ** (1 / 2)
             ang -= 2 * np.pi / 2 * fade(73.99, 75.33-73.99, GUITAR_SOLO, 0) ** (1 / 2)
-            r = util.lerp(lyric_pos, 0, 1, 2, 4)
+            ang -= 2 * np.pi / 2 * fade(107.21, 107.93-107.21, GUITAR_SOLO, 0) ** (1 / 2)
+            ang -= 2 * np.pi / 2 * fade(118.24, 118.56-118.24, GUITAR_SOLO, 0) ** (1 / 2)
+            r = util.lerp(self.lyric_pos_filter.value, 0, 1, 2, 4)
             blip((r * np.cos(ang), r * np.sin(ang)), lyric_power, 82/360, 0.40, 1)
+
+        painter.restore()
+        # GUITAR SOLO
+        guitar_solo_note_offsets = [
+            151.44,
+            159.67,
+            167.92,
+            176.15,
+        ]
+        guitar_solo_note_timings = [
+            151.44, 151.79, 152.13, 152.47, 152.83,
+            153.14, 153.34, 153.49, 153.64,
+
+            154.19, 154.53, 154.87, 155.20, 155.56,
+            155.90, 156.07, 156.41,
+
+            156.94, 157.25, 157.64, 157.96, 158.32,
+            158.65, 158.86, 159.01, 159.27
+        ]
+        guitar_solo_note_pos = [
+                 0,      0,      0,      0,      0,
+                 0,      0,      0,      1,
+
+                 1,      1,      1,      1,      1,
+                 1,      0,      2,
+
+                 2,      2,      2,      2,      2,
+                 1,      2,      2,      3,
+        ]
+        guitar_solo_blip_offsets = [
+            -2.5,
+            -1.5,
+             1.5,
+             2.5,
+        ]
+        guitar_solo_blip_colors = [
+            (43/360, 0.84, 1.00),
+            (37/360, 0.84, 0.91),
+            (29/360, 0.79, 1.00),
+            (20/360, 0.84, 0.91),
+        ]
+        for time_offset in guitar_solo_note_offsets:
+            time_offset = time_offset - guitar_solo_note_offsets[0]
+            for pos, timing in zip(guitar_solo_note_pos, guitar_solo_note_timings):
+                timing += time_offset
+                offset = guitar_solo_blip_offsets[pos]
+                color = guitar_solo_blip_colors[pos]
+                pos = (
+                    offset,
+                    util.lerp(
+                        t,
+                        timing, timing + 0.2,
+                        -4, 4))
+                blip(pos, 1.0, *color)
+
+        outro_lyrics_note_offsets = [
+            211.80,
+            220.02,
+        ]
+        outro_lyrics_note_timings = [
+            211.80, 212.52, 213.17,
+        ]
+        outro_lyrics_note_pos = [
+                 0,      2,      1,
+        ]
+        outro_lyrics_blip_offsets = [
+            -2.5,
+            -1.5,
+             2.5,
+        ]
+        outro_lyrics_blip_colors = [
+            (43/360, 0.84, 1.00),
+            (37/360, 0.84, 0.91),
+            (29/360, 0.79, 1.00),
+        ]
+        for time_offset in outro_lyrics_note_offsets:
+            time_offset = time_offset - outro_lyrics_note_offsets[0]
+            for pos, timing in zip(outro_lyrics_note_pos, outro_lyrics_note_timings):
+                timing += time_offset
+                offset = outro_lyrics_blip_offsets[pos]
+                color = outro_lyrics_blip_colors[pos]
+                pos = (
+                    offset,
+                    util.lerp(
+                        util.lerp(
+                            t,
+                            timing, timing + 0.6,
+                            0, 1,
+                            clip=True) ** (1 / 2),
+                        0, 1,
+                        4, -1.5))
+                blip(pos, fade(timing, 0, timing + 0.6, -0.4), *color)
 
         painter.end()
 

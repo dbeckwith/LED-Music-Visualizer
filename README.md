@@ -4,6 +4,10 @@ I created this project as part of my Humanities & Arts Practicum at Worcester Po
 
 The goal behind the project was to try to find a way to map the sounds we hear and the feelings evoked in us by music to light. I wanted to try to use light to convey the same emotions that I was feeling from listening to a song.
 
+## How It Works
+
+First, the program loads the given audio file and does some pre-processing on it. The pre-processing involves creating a [spectrogram](https://en.wikipedia.org/wiki/Spectrogram) of the audio using the [Discrete Fourier Transform](https://en.wikipedia.org/wiki/Discrete_Fourier_transform) and applying a [Mel Filter](http://practicalcryptography.com/miscellaneous/machine-learning/guide-mel-frequency-cepstral-coefficients-mfccs/). Using this high-level information about the component frequencies of the audio, the program generates an animation. The animation is drawn for each frame on a canvas in memory, mapping different frequencies to different properties of the "blips" that are drawn. Then each frame is converted into RGB pixel data that is sent to a [FadeCandy LED controller](https://www.adafruit.com/product/1689), which controls an LED matrix that displays the animation. The animation is partly reactive to the spectrogram, and partly hand-choreographed. The audio file is also played along with the animation to make sure that the two are perfectly synchronized.
+
 ## Demo
 
 [Demo video](https://vimeo.com/206593451)

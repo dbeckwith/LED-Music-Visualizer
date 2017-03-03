@@ -4,22 +4,21 @@ I created this project as part of my Humanities & Arts Practicum at Worcester Po
 
 The goal behind the project was to try to find a way to map the sounds we hear and the feelings evoked in us by music to light. I wanted to try to use light to convey the same emotions that I was feeling from listening to a song.
 
-## Installation
+## Demo
+
+[Demo video](https://vimeo.com/206593451)
+
+[Blog post](http://www.joshuarosenstock.com/teaching/lightart-c17/led-music-visualizer-final/)
+
+## Try It Out
 
 ### Hardware
 
-You'll need to aquire the following hardware in order to build the visualizer, all available from [Adafruit](https://www.adafruit.com/):
-
-* [FadeCandy](https://www.adafruit.com/product/1689)
-* [Mini USB cable](https://www.adafruit.com/products/260)
-* [5V 10A power supply](https://www.adafruit.com/product/658)
-* [DC barrel jack](https://www.adafruit.com/product/373)
-* [3-pin JST cables](https://www.adafruit.com/products/1663)
-* [NeoPixel RGB LED strip](https://www.adafruit.com/products/1138)
-
-Follow Adafruit's excellent [tutorial](https://learn.adafruit.com/led-art-with-fadecandy?view=all#wiring-your-leds) on how to wire the FadeCandy. The only difference is that you will be wiring an LED strip, not an LED matrix.
+I used all the same materials from Adafruit's excellent [tutorial](https://learn.adafruit.com/led-art-with-fadecandy?view=all) on how to use their FadeCandy LED controller board. Simply follow this tutorial and you'll have the same electronics set-up I used. The only other material I used was the translucent white acrylic from [Delvie's Plastics](http://www.delviesplastics.com/p/Translucent_Cast_Acrylic_Sheet.html), which I cut to make an enclosure around the LED matrix. This allows the piercing, direct light of the LEDs to be diffused and softend a bit, which creates a more pleasing display.
 
 ### Software
+
+At the moment, the visualization is specifically coreographed to the song ["Such Great Heights" by The Postal Service](https://www.youtube.com/watch?v=FatiC6NxCcE), so you'll need an MP3 file of that song.
 
 You'll need to install the following software in order to run the code:
 
@@ -39,10 +38,12 @@ You may want to do this in a [Virtual Environment](http://docs.python-guide.org/
 
 First, launch the FadeCandy server by running the appriopriate `fcserver` executable for your platform in the `bin` folder of the FadeCandy download. Once the server is running, connect the FadeCandy board by USB to your computer. You should see a message on the server saying it has connected to a board. If it's your first time connecting a FadeCandy board, you may have wait a minute for your OS to install the drivers.
 
-Next, open [`config.py`](config.py) and make sure that the values there match your setup. `PIXEL_COUNT` should be the number of NeoPixels on your LED strip, `CHANNELS_PER_PIXEL` should be `3` for the RGB pixels, and `FADECANDY_HOST` and `FADECANDY_PORT` should match the values shown when the FadeCandy server was launched.
+Next, open [`config.py`](config.py) and make sure that the values there match your setup. `DISPLAY_SHAPE` should be a tuple of the number of columns and rows in your LED matrix (probably just 8 by 8), `CHANNELS_PER_PIXEL` should be `3` for the RGB pixels, and `FADECANDY_HOST` and `FADECANDY_PORT` should match the values shown when the FadeCandy server was launched.
 
 Next, run the main script from the repo's top level directory to get help on its usage:
 
 ```bash
 python main.py -h
 ```
+
+At the moment, the visualization is specifically coreographed to the song ["Such Great Heights" by The Postal Service](https://www.youtube.com/watch?v=FatiC6NxCcE), so if you own an MP3 of that song, supply a path to it for the `--audio-path` argument.
